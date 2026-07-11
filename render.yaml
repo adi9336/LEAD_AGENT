@@ -21,6 +21,7 @@
 
 cronJobs:
   - name: lead-agent-cron
+    type: cron
     runtime: docker
     dockerfilePath: ./Dockerfile
     # Standard cron schedule: run at minute 0 of every hour.
@@ -68,7 +69,9 @@ cronJobs:
 
 services:
   - name: lead-agent-web
+    type: web
     runtime: docker
+    plan: free
     dockerfilePath: ./Dockerfile
     # Serve the FastAPI app (dashboard) instead of running the cron.
     envVars:
