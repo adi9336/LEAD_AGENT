@@ -68,17 +68,17 @@ jobs:
         value: https://api.smith.langchain.com
       # No DATABASE_URL / REDIS_URL -> SQLite default (audit log only).
 
-# ---- Web service: public dashboard --------------------------------
+# ---- Web service: public dashboard -------------------------------
+# Per Render's docker-web example, the run command goes in dockerCommand:.
+# This serves the FastAPI dashboard; it reads leads from monday live.
 services:
   - name: lead-agent-web
     type: web
     runtime: docker
     plan: free
     dockerfilePath: ./Dockerfile
-    # Serve the FastAPI app (dashboard) instead of running the cron.
+    dockerCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
     envVars:
-      - key: ROLE
-        value: web
       - key: ADAPTER_MODE
         value: live
       - key: USE_LLM
