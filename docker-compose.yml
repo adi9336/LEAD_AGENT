@@ -1,0 +1,46 @@
+# ============================================================
+# docker-compose — local parity: web + worker + postgres + redis
+# ============================================================
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: leadagent
+      POSTGRES_PASSWORD: leadagent
+      POSTGRES_DB: leads
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  web:
+    build: .
+    environment:
+      ADAPTER_MODE: ${ADAPTER_MODE:-live}
+      DATABASE_URL: postgresql+psycopg://leadagent:leadagent@db:5432/leads
+      REDIS_URL: redis://redis:6379/0
+      # live creds injected from host env / secret store
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+
+  worker:
+    build: .
+    environment:
+      ROLE: worker
+      ADAPTER_MODE: ${ADAPTER_MODE:-live}
+      DATABASE_URL: postgresql+psycopg://leadagent:leadagent@db:5432/leads
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+
+volumes:
+  pgdata:

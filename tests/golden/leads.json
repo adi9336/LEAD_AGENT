@@ -1,0 +1,52 @@
+[
+  {
+    "id": "G1",
+    "name": "Joe",
+    "company": "FryCo",
+    "source": "referral",
+    "industry": "food service",
+    "inquiry_type": "request pricing",
+    "expect_tier": "Hot",
+    "expect_class": "end_customer"
+  },
+  {
+    "id": "G2",
+    "name": "Sam",
+    "company": "TechSoft",
+    "source": "paid_ad",
+    "industry": "software",
+    "inquiry_type": "just browsing",
+    "expect_tier": "Cold",
+    "expect_class": "end_customer"
+  },
+  {
+    "id": "G3",
+    "name": "Pat",
+    "company": "Distro Inc",
+    "source": "website",
+    "industry": "food distribution",
+    "inquiry_type": "want to distribute",
+    "expect_tier": "Hot",
+    "expect_class": "distributor"
+  },
+  {
+    "id": "G4",
+    "name": "Maria",
+    "company": "Cafe Sol",
+    "source": "website",
+    "industry": "restaurant",
+    "inquiry_type": "general info",
+    "expect_tier": "Warm",
+    "expect_class": "end_customer"
+  },
+  {
+    "id": "G5",
+    "name": "Lee",
+    "company": "Industrial Foods",
+    "source": "trade_show",
+    "industry": "food manufacturing",
+    "inquiry_type": "request demo",
+    "expect_tier": "Hot",
+    "expect_class": "end_customer"
+  }
+]

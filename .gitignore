@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Env & secrets (never commit)
+.env
+.env.*
+!.env.example
+
+# Local database (SQLite used in mock mode)
+*.db
+*.sqlite
+data/
+
+# Logs / artifacts
+*.log
+.pytest_cache/
+.coverage
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
