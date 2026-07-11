@@ -49,8 +49,13 @@ class Settings(BaseSettings):
     # SQLite for local/dev; set a Postgres URL for production (same models).
     database_url: str = "sqlite:///./lead_agent.db"
 
-    # ---- Scheduler (live mode only) ----
+    # ---- Queue / scoring reliability ----
+    # Scoring runs on a Celery queue (when Redis is available) with retry/backoff
+    # so transient LLM failures are retried for a REAL score instead of silently
+    # falling back to the rules engine.
     redis_url: str = "redis://localhost:6379/0"
+    score_max_retries: int = 5          # LLM attempts before rules fallback
+    score_retry_backoff: int = 15       # seconds (Celery exponential backoff base)
 
     # ---- SLA targets (see plan.md / Agent.md) ----
     sla_score_minutes: int = 5       # 100% leads scored within 5 min of intake

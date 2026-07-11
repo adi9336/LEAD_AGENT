@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.database.session import SessionLocal, init_db  # noqa: E402
 from app.models.schemas import LeadInput  # noqa: E402
-from app.services.lead_service import process_lead  # noqa: E402
+from app.services.lead_service import intake_lead, score_and_deliver  # noqa: E402
 
 SAMPLE_LEADS = [
     LeadInput(id="L1", name="Joe", company="FryCo",
@@ -39,7 +39,11 @@ def main() -> None:
     db = SessionLocal()
     try:
         for lead in SAMPLE_LEADS:
-            rec = process_lead(db, lead, request_id=f"sim-{lead.id}")
+            intake_lead(db, lead, request_id=f"sim-{lead.id}")
+            rec = score_and_deliver(db, lead.id, request_id=f"sim-{lead.id}")
+            if rec is None:
+                print(f"-> {lead.id}: FAILED (lead not found)")
+                continue
             print(f"-> {lead.id}: tier={rec.tier} score={rec.score} "
                   f"class={rec.classification} alerted={rec.alert_sent}")
     finally:

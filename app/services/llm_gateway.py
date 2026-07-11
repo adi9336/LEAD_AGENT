@@ -50,12 +50,22 @@ def _traceable(fn):
 
 
 @_traceable
-def score_lead(lead: LeadInput, *, request_id: str | None = None) -> ScoreResult:
+def score_lead(lead: LeadInput, *, request_id: str | None = None,
+               allow_fallback: bool = True) -> ScoreResult:
     """Score a lead via LLM (if available) with deterministic fallback.
+
+    Args:
+        lead: the inbound lead.
+        request_id: correlation id for logs/traces.
+        allow_fallback: if False, a failed/empty LLM result raises instead of
+            degrading to the rules engine. Used by the retry queue so transient
+            LLM errors are retried for a REAL score rather than silently
+            producing a fake one.
 
     Returns:
         ScoreResult — from the LLM when available & valid, otherwise from the
-        rules engine. Never raises on model failure (guarantees 100% scoring).
+        rules engine (unless ``allow_fallback`` is False, in which case the
+        underlying error is propagated for Celery to retry).
     """
     # --- Keyless / forced-rules path ----------------------------------------
     if not _use_llm():
@@ -87,17 +97,22 @@ def score_lead(lead: LeadInput, *, request_id: str | None = None) -> ScoreResult
         parsed = _extract_json(raw.content) if hasattr(raw, "content") else None
         result = validate_score_dict(parsed) if isinstance(parsed, dict) else None
         if result is None:
-            # Model returned malformed output -> fall back, keep pipeline moving.
+            # Model returned malformed output. If the caller forbids fallback
+            # (the retry queue) we raise so Celery retries for a real score.
             log("scored", request_id=request_id, mode="llm_invalid_fallback")
-            return rules_score(lead)
+            if allow_fallback:
+                return rules_score(lead)
+            raise ValueError("llm returned malformed/empty score")
 
         log("scored", request_id=request_id, mode="llm", tier=result.tier,
             latency_ms=latency_ms)
         return result
-    except Exception as exc:  # noqa: BLE001 - never block scoring on model error
+    except Exception as exc:  # noqa: BLE001
         log("scored", request_id=request_id, mode="llm_error_fallback",
             error=type(exc).__name__)
-        return rules_score(lead)
+        if allow_fallback:
+            return rules_score(lead)
+        raise  # propagate so the retry queue can try again for a real score
 
 
 def _extract_json(text: str) -> dict | None:

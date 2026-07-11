@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.database.session import Base, SessionLocal, engine
 from app.models.schemas import LeadInput
-from app.services.lead_service import process_lead
+from app.services.lead_service import intake_lead, score_and_deliver
 from app.services.scoring import rules_score
 from app.scheduler.hygiene import run_hygiene
 
@@ -66,15 +66,28 @@ def test_rules_distributor():
 
 
 # ---- full intake pipeline --------------------------------------------------
-def test_process_lead_scores_and_alerts(db: Session):
-    lead = LeadInput(id="L1", name="Joe", company="FryCo",
-                     source="referral", industry="food service",
-                     inquiry_type="request pricing")
-    rec = process_lead(db, lead, request_id="t1")
-    assert rec.tier == "Hot"
-    assert rec.alert_sent is True
-    assert rec.scored_at is not None
-    assert rec.alerted_at is not None
+def test_intake_scores_and_alerts(db: Session):
+    # Force mock adapters + rules scoring so the test is deterministic and
+    # fully offline (no live WhatsApp/monday/LLM calls), regardless of .env.
+    from app.config import settings
+    prev_mode = settings.adapter_mode
+    prev_llm = settings.use_llm
+    settings.adapter_mode = "mock"
+    settings.use_llm = False
+    try:
+        lead = LeadInput(id="L1", name="Joe", company="FryCo",
+                         source="referral", industry="food service",
+                         inquiry_type="request pricing")
+        intake_lead(db, lead, request_id="t1")
+        rec = score_and_deliver(db, "L1", request_id="t1")
+        assert rec is not None
+        assert rec.tier == "Hot"
+        assert rec.alert_sent is True
+        assert rec.scored_at is not None
+        assert rec.alerted_at is not None
+    finally:
+        settings.adapter_mode = prev_mode
+        settings.use_llm = prev_llm
 
 
 # ---- hygiene ---------------------------------------------------------------
@@ -170,3 +183,37 @@ def test_webhook_challenge_handshake():
     r = c.get("/webhook/monday", params={"challenge": "abc123"})
     assert r.status_code == 200
     assert r.json() == {"challenge": "abc123"}
+
+
+# ---- Scoring queue: retry/backoff is wired (offline, no Redis) -------------
+def test_scoring_queue_retry_configured():
+    """The Celery task must retry the LLM with backoff so transient failures
+    are retried for a REAL score rather than silently falling back to rules."""
+    from app.services.tasks import score_and_deliver_task
+    from app.config import settings
+
+    assert score_and_deliver_task is not None
+    assert Exception in (score_and_deliver_task.autoretry_for or ())
+    assert score_and_deliver_task.max_retries == settings.score_max_retries
+    assert score_and_deliver_task.retry_backoff == settings.score_retry_backoff
+
+    # allow_fallback=False during retries => an LLM error raises (so Celery retries)
+    from app.services.llm_gateway import score_lead
+    from app.models.schemas import LeadInput
+    lead = LeadInput(id="Q1", name="x", company="FryCo",
+                     source="referral", industry="food service",
+                     inquiry_type="request pricing")
+    prev_llm = settings.use_llm
+    prev_key = settings.openai_api_key
+    settings.use_llm = True
+    settings.openai_api_key = "sk-bad-key"   # force the LLM call to raise
+    try:
+        raised = False
+        try:
+            score_lead(lead, request_id="q", allow_fallback=False)
+        except Exception:
+            raised = True
+        assert raised, "allow_fallback=False must raise on LLM failure (enables retry)"
+    finally:
+        settings.use_llm = prev_llm
+        settings.openai_api_key = prev_key

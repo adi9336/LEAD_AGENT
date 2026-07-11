@@ -1,8 +1,9 @@
 """Webhook router — monday.com inbound lead intake.
 
 Security: verifies the shared webhook secret (header) before processing.
-Returns 202 immediately so monday.com is never blocked; heavy work runs in
-`process_lead` (sync here; can be pushed to a worker later without API change).
+Returns 202 immediately so monday.com is never blocked; scoring is enqueued
+on the Celery queue (`intake_lead` persists + `score_and_deliver` retries the
+LLM with backoff) so heavy work runs off the request path.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from app.common.logging import get_request_id, log, new_request_id, set_request_
 from app.config import settings
 from app.database.session import get_session
 from app.models.schemas import LeadInput
-from app.services.lead_service import process_lead
+from app.services.lead_service import intake_lead
 
 router = APIRouter()
 
@@ -67,7 +68,7 @@ async def webhook_monday(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "invalid payload")
 
     lead_in = LeadInput(**data)
-    process_lead(db, lead_in, request_id=rid)
+    intake_lead(db, lead_in, request_id=rid)
     log("intake_accepted", request_id=rid, lead_id=lead_in.id)
     return {"status": "accepted", "lead_id": lead_in.id, "request_id": rid}
 

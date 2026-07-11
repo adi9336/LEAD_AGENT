@@ -63,6 +63,13 @@ harness (`tests/golden/leads.json`) that gates scoring quality.
 - **Storage:** SQLAlchemy (SQLite dev / Postgres prod) + `EventLog` audit trail.
 - **Scheduler:** plain `run_hygiene()` wrapped by Celery beat.
 - **Observability:** request-id structured logs + `/audit` SLA report.
+- **Scoring queue:** the webhook persists the lead and enqueues scoring on a
+  Celery queue (Redis broker). The `score_and_deliver` task retries the LLM
+  with exponential backoff (`SCORE_MAX_RETRIES`, `SCORE_RETRY_BACKOFF`) so
+  transient LLM failures (timeouts, rate limits) are retried for a REAL score
+  rather than silently degrading to the rules engine. Only after all retries
+  are exhausted does it fall back to rules (lead is never left unscored).
+  Without Redis, scoring runs inline (synchronous) so local dev needs no broker.
 - **Security:** webhook HMAC verify, admin Bearer token, PII redaction, right-to-erasure.
 
 ## Deploy (Railway)

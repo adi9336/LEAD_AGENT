@@ -13,8 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.common.logging import log
 from app.database.models import Lead
-from app.models.schemas import LeadInput
-from app.services.lead_service import process_lead
+from app.services.lead_service import score_and_deliver
 
 
 def run_hygiene(db: Session, *, request_id: str | None = None) -> dict:
@@ -34,15 +33,9 @@ def run_hygiene(db: Session, *, request_id: str | None = None) -> dict:
     recovered = 0
     escalated = 0
     for lead in stale:
-        # Re-attempt scoring/enrich/alert via the normal pipeline.
+        # Re-attempt scoring/enrich/alert via the same retryable pipeline.
         try:
-            process_lead(
-                db,
-                LeadInput(id=lead.id, name=lead.name, company=lead.company,
-                          source=lead.source, industry=lead.industry,
-                          inquiry_type=lead.inquiry_type, created_at=lead.created_at),
-                request_id=request_id or f"hygiene-{lead.id}",
-            )
+            score_and_deliver(db, lead.id, request_id=request_id or f"hygiene-{lead.id}")
             if lead.scored_at is not None:
                 recovered += 1
             else:
