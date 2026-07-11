@@ -27,9 +27,8 @@ jobs:
     plan: free
     # Standard cron schedule: run at minute 0 of every hour.
     schedule: "0 * * * *"
-    # Dockerfile CMD already branches on $ROLE; for the cron we run the
-    # batch script directly. Plain string (Render wants a string, not a list).
-    command: "python scripts/cron_run.py"
+    # Render cron jobs use `startCommand` (not `command`). Plain string.
+    startCommand: "python scripts/cron_run.py"
     envVars:
       - key: ADAPTER_MODE
         value: live
