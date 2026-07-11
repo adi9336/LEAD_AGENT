@@ -67,6 +67,65 @@ harness (`tests/golden/leads.json`) that gates scoring quality.
 
 ## Deploy (Railway)
 
-- Web service: this image, command = web (uvicorn).
-- Worker service: same image, `ROLE=worker` (Celery beat).
-- Add-ons: Postgres + Redis. Map env vars from `.env.example`.
+The repo is Railway-ready out of the box:
+
+- `Dockerfile` builds one image; the `CMD` runs `web` (uvicorn) by default,
+  or `worker` (Celery beat) when `ROLE=worker`.
+- `Procfile` + `railway.toml` declare both services; Railway injects `PORT`
+  and the Postgres/Redis add-on URLs as env vars.
+- `.dockerignore` keeps secrets and local state out of the image.
+
+Steps:
+1. Push the repo to GitHub and create a Railway project from it.
+2. Add two services from the same image:
+   - **web** — no extra env (Dockerfile defaults to uvicorn).
+   - **worker** — set `ROLE=worker` (Celery hygiene sweep).
+3. Add the **Postgres** add-on; Railway sets `DATABASE_URL` automatically.
+   Add **Redis** for the worker (`REDIS_URL`).
+4. In the Railway **Variables** panel, set every value from `.env.example`:
+   `ADAPTER_MODE=live`, `MONDAY_*`, `WHATSAPP_*` (or `TWILIO_*`),
+   `OPENAI_API_KEY`, `LANGSMITH_*`, and the two secrets
+   `WEBHOOK_SECRET` + `ADMIN_TOKEN`. Generate strong random values:
+   `openssl rand -hex 24`.
+5. Deploy. The web service health-checks `/health`.
+
+## Go live end-to-end (automatic webhook)
+
+So far leads are scored when you POST to `/webhook/monday` manually. To make
+it automatic, register a monday webhook so new board items are scored without
+you doing anything:
+
+1. Expose the server publicly (any stable HTTPS URL monday can reach):
+   - Local test: `cloudflared tunnel --url http://localhost:8000`
+   - Railway: use the deployed service URL (stable, no tunnel needed).
+2. Create the subscription (board 5029839272, event = create_item):
+   ```bash
+   python - <<'PY'
+   import httpx, os
+   from dotenv import load_dotenv; load_dotenv()
+   TOKEN=os.getenv("MONDAY_API_TOKEN"); BID=os.getenv("MONDAY_BOARD_ID")
+   URL="<YOUR_PUBLIC_URL>/webhook/monday"   # e.g. https://xxx.railway.app/webhook/monday
+   q='mutation($b:ID!,$u:String!,$e:WebhookEventType!){create_webhook(board_id:$b,url:$u,event:$e){id}}'
+   r=httpx.post("https://api.monday.com/v2",
+       json={"query":q,"variables":{"b":BID,"u":URL,"e":"create_item"}},
+       headers={"Authorization":f"Bearer {TOKEN}"}, timeout=25)
+   print(r.json())
+   PY
+   ```
+   monday will GET `/webhook/monday?challenge=...` to verify, then start
+   POSTing on every new item.
+3. If you set `WEBHOOK_SECRET`, configure the **same** value as the webhook
+   secret in monday (monday sends it as `X-Monday-Webhook-Secret`; the app
+   HMAC-verifies the body). Leave it empty only for local dev.
+
+After this, every new monday item is scored by the LLM, written back to the
+board (Status/Score/Classification/Rationale), and you get a WhatsApp alert —
+no manual step.
+
+## Security notes
+
+- `WEBHOOK_SECRET` enables HMAC verification of inbound webhooks (set in both
+  `.env` and the monday webhook config).
+- `ADMIN_TOKEN` protects `/leads` and `/audit` (send `Authorization: Bearer
+  <token>`).
+- All secrets live in env / Railway's secret store only — never in code or git.

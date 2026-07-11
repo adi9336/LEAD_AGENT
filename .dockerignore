@@ -1,0 +1,23 @@
+# Never bake secrets or local state into the image.
+.env
+.env.*
+!.env.example
+
+# Python cruft
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.db
+*.sqlite
+.pytest_cache/
+.coverage
+
+# Local logs / artifacts
+*.log
+data/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/

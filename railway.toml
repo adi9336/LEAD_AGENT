@@ -1,0 +1,26 @@
+# Railway project config. Two services from ONE Docker image:
+#   1) web    -> FastAPI (uvicorn)  — receives monday webhooks, serves /audit
+#   2) worker -> Celery beat+worker — pipeline hygiene sweep
+# Add-ons: Postgres (+ Redis) are attached via the dashboard; their URLs are
+# injected as env vars (DATABASE_URL / REDIS_URL) automatically.
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 100
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+[[services]]
+name = "web"
+# ROLE is left unset -> Dockerfile CMD defaults to uvicorn.
+# Railway injects PORT; the Procfile/CMD binds to ${PORT:-8000}.
+
+[[services]]
+name = "worker"
+# Same image, different role. The Dockerfile CMD checks $ROLE=worker.
+[services.env]
+ROLE = "worker"
