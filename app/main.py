@@ -9,6 +9,12 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
+# Load .env into os.environ early so env-reading libraries (LangSmith) see
+# tracing flags at import time. pydantic-settings does NOT populate os.environ.
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from fastapi import FastAPI
 
 from app.api import routes, webhook

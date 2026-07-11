@@ -9,6 +9,11 @@ from __future__ import annotations
 
 from celery import Celery
 
+# Load .env into os.environ so env-reading libs (LangSmith) see tracing flags.
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from app.config import settings
 from app.scheduler.hygiene import run_hygiene
 

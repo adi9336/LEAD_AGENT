@@ -14,6 +14,14 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+# Load .env into os.environ BEFORE importing the app. LangSmith (and other
+# env-reading libraries) read os.environ at import time; pydantic-settings
+# loads .env into its own Settings object but does NOT populate os.environ,
+# so without this explicit load the tracing flag is invisible to LangSmith.
+from dotenv import load_dotenv
+
+load_dotenv()
+
 # Make the repo root importable when run as a script.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
