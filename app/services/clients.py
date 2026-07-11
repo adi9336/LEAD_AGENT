@@ -123,6 +123,12 @@ class LiveCloudWhatsApp(WhatsAppClient):
             headers={"Authorization": f"Bearer {settings.whatsapp_token}"}, timeout=10,
         )
         resp.raise_for_status()
+        # Meta returns HTTP 200 even when the message is rejected (e.g. recipient
+        # not opted in); the error lives in the JSON body. Surface it so the
+        # pipeline's retry/escalation actually triggers.
+        body = resp.json()
+        if "error" in body:
+            raise RuntimeError(f"WhatsApp Cloud API error: {body['error']}")
 
 
 class LiveTwilioWhatsApp(WhatsAppClient):
