@@ -1,8 +1,9 @@
 """FastAPI application factory.
 
-`create_app()` wires the routers and initializes the database. The web server
-(uvicorn/gunicorn) imports this; the Celery worker imports `app.scheduler.celery_app`
-instead. Keeping them separate avoids importing FastAPI/Celery where not needed.
+`create_app()` wires the routers and initializes the database. The primary
+path is the hourly cron job (`scripts/cron_run.py`); the web server here is an
+optional instant-scoring fast-path (monday webhook -> score inline). Keeping
+them separate avoids importing FastAPI where not needed.
 """
 
 from __future__ import annotations

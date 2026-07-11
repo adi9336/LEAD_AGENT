@@ -69,6 +69,9 @@ async def webhook_monday(
 
     lead_in = LeadInput(**data)
     intake_lead(db, lead_in, request_id=rid)
+    # Optional fast-path: score inline (the hourly cron is the primary path).
+    from app.services.lead_service import score_and_deliver
+    score_and_deliver(db, lead_in.id, request_id=rid, allow_fallback=True)
     log("intake_accepted", request_id=rid, lead_id=lead_in.id)
     return {"status": "accepted", "lead_id": lead_in.id, "request_id": rid}
 

@@ -47,29 +47,29 @@ harness (`tests/golden/leads.json`) that gates scoring quality.
 
 1. Copy `.env.example` → `.env`.
 2. Set `ADAPTER_MODE=live`, fill `MONDAY_*` and `WHATSAPP_*` (or `TWILIO_*`).
-3. Set `WEBHOOK_SECRET`, `ADMIN_TOKEN`, `OPENAI_API_KEY`, `DATABASE_URL`
-   (Postgres for prod).
-4. Run Celery worker for the hygiene sweep:
+3. Set `WEBHOOK_SECRET`, `ADMIN_TOKEN`, `OPENAI_API_KEY`.
+4. Run the hourly batch locally (or via the scheduler):
    ```bash
-   celery -A app.scheduler.celery_app.celery_app worker --beat
+   python scripts/cron_run.py
+   # or on a timer: 0 * * * * cd /path && .venv/bin/python scripts/cron_run.py
    ```
 
-## Architecture (nine-layer, see Agent.md)
+## Architecture (see Agent.md)
 
-- **Channels:** monday.com webhook (in) · WhatsApp (out) · admin REST.
-- **Orchestration:** `app/services/lead_service.py` (parse→store→score→enrich→alert).
+- **Channels:** monday.com (source of leads) · WhatsApp (out) · optional admin REST.
+- **Orchestration:** `app/services/lead_service.py` (`run_cron` → fetch due leads →
+  score → enrich → alert).
 - **LLM gateway:** `app/services/llm_gateway.py` (LangChain + deterministic fallback).
 - **Adapters:** `Mock*`/`Live*` for monday + WhatsApp — same core, swappable transport.
-- **Storage:** SQLAlchemy (SQLite dev / Postgres prod) + `EventLog` audit trail.
-- **Scheduler:** plain `run_hygiene()` wrapped by Celery beat.
+- **Storage:** SQLAlchemy (SQLite default / Postgres optional) + `EventLog` audit trail.
+- **Scheduler:** `run_cron()` runs hourly (Render Cron Job or system crontab),
+  fetching due leads and scoring each.
 - **Observability:** request-id structured logs + `/audit` SLA report.
-- **Scoring queue:** the webhook persists the lead and enqueues scoring on a
-  Celery queue (Redis broker). The `score_and_deliver` task retries the LLM
-  with exponential backoff (`SCORE_MAX_RETRIES`, `SCORE_RETRY_BACKOFF`) so
-  transient LLM failures (timeouts, rate limits) are retried for a REAL score
-  rather than silently degrading to the rules engine. Only after all retries
-  are exhausted does it fall back to rules (lead is never left unscored).
-  Without Redis, scoring runs inline (synchronous) so local dev needs no broker.
+- **Scoring retry:** `score_and_deliver` retries the LLM with exponential
+  backoff (`SCORE_MAX_RETRIES`, `SCORE_RETRY_BACKOFF`) so transient LLM
+  failures (timeouts, rate limits) are retried for a REAL score rather than
+  silently degrading to the rules engine. Only after all retries are exhausted
+  does it fall back to rules (a lead is never left unscored).
 - **Security:** webhook HMAC verify, admin Bearer token, PII redaction, right-to-erasure.
 
 ## How it runs (architecture)
@@ -106,15 +106,14 @@ Steps:
 4. Deploy. The job runs hourly; check the run logs for `due=/scored=/failed=`.
 
 Alternative (free, your own machine): run `python scripts/cron_run.py` from a
-system cron (`0 * * * * cd /path && /path/.venv/bin/python scripts/cron_run.py`)
-or `celery -A app.scheduler.celery_app.celery_app beat` for the queue variant.
+system cron (`0 * * * * cd /path && /path/.venv/bin/python scripts/cron_run.py`).
 
-## Deploy — Railway / Render web+worker (optional fast-path)
+## Optional web fast-path (instant scoring)
 
-If you also want instant (event-driven) scoring via the monday webhook, the
-web+worker layout is still supported (see `railway.toml` / the earlier web+
-worker `render.yaml` shape). That needs Redis + Postgres and costs more. For
-the hourly batch, the Cron Job above is sufficient and cheapest.
+If you also want instant (event-driven) scoring on item create, run the web
+service (`ROLE=web`, e.g. `uvicorn app.main:app --port 8000`) and register the
+monday webhook below. This needs no Celery/Redis — the webhook scores inline.
+For the hourly batch, the Cron Job above is sufficient and cheapest.
 
 ## Go live (webhook fast-path, optional)
 

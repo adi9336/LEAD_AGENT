@@ -18,10 +18,7 @@ langchain-openai>=0.1
 langsmith>=0.1
 
 # ── Observability (LAZY-imported: only needed when LANGSMITH_TRACING=true) ──
-# scan). The hygiene logic itself is a plain function and is fully
-# unit-tested without Redis/Celery.
-celery>=5.3
-redis>=5.0
+langsmith>=0.1
 
 # ── Dev / tests ────────────────────────────────────────────────
 pytest>=8.0

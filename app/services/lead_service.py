@@ -58,14 +58,11 @@ def _event(db: Session, lead_id: str | None, event: str, status: str,
     db.commit()
 
 
-def intake_lead(db: Session, lead_in: LeadInput, *, request_id: str | None = None,
-               enqueue: bool = True) -> Lead:
-    """Persist the lead and enqueue scoring (default). Returns the (pending) Lead.
+def intake_lead(db: Session, lead_in: LeadInput, *, request_id: str | None = None) -> Lead:
+    """Persist the lead. Returns the (pending) Lead.
 
-    Args:
-        enqueue: when True (default, webhook path) scoring is pushed to the
-            Celery queue (or run inline if no broker). When False (cron path)
-            the caller runs ``score_and_deliver`` itself, so we don't double-run.
+    The caller is responsible for scoring (e.g. ``run_cron`` calls
+    ``score_and_deliver`` directly, or the webhook does the same inline).
     """
     rid = request_id
 
@@ -86,12 +83,6 @@ def intake_lead(db: Session, lead_in: LeadInput, *, request_id: str | None = Non
         lead.inquiry_type = lead_in.inquiry_type
     db.commit()
     log("intake", request_id=rid, lead_id=lead.id)
-
-    # 2. Enqueue scoring (or run inline if no queue available).
-    if enqueue:
-        from app.services.tasks import enqueue_scoring
-        enqueue_scoring(lead.id, request_id=rid)
-
     return lead
 
 
@@ -203,8 +194,7 @@ def run_cron(db: Session, *, request_id: str | None = None) -> dict:
             # Persist (idempotent) then score+deliver. score_and_deliver
             # retries the LLM internally; allow_fallback=False keeps retries
             # honest, True only here as the final safety net.
-            intake_lead(db, lead_in, request_id=f"{rid}-{lead_in.id}",
-                        enqueue=False)
+            intake_lead(db, lead_in, request_id=f"{rid}-{lead_in.id}")
             score_and_deliver(db, lead_in.id,
                               request_id=f"{rid}-{lead_in.id}",
                               allow_fallback=True)

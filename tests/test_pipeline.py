@@ -14,7 +14,6 @@ from app.database.session import Base, SessionLocal, engine
 from app.models.schemas import LeadInput
 from app.services.lead_service import intake_lead, score_and_deliver
 from app.services.scoring import rules_score
-from app.scheduler.hygiene import run_hygiene
 
 
 @pytest.fixture()
@@ -90,25 +89,7 @@ def test_intake_scores_and_alerts(db: Session):
         settings.use_llm = prev_llm
 
 
-# ---- hygiene ---------------------------------------------------------------
-def test_hygiene_recovers_stale_lead(db: Session):
-    # Seed an old, unscored lead (beyond the 24h SLA).
-    from datetime import datetime, timedelta, timezone
-    from app.database.models import Lead
-
-    old = Lead(id="STALE", name="Old", created_at=datetime.now(timezone.utc)
-               - timedelta(hours=30))
-    db.add(old)
-    db.commit()
-
-    report = run_hygiene(db, request_id="h1")
-    assert report["found"] == 1
-    assert report["recovered"] == 1
-    refreshed = db.get(Lead, "STALE")
-    assert refreshed.scored_at is not None
-
-
-# ---- eval harness (golden set) ---------------------------------------------
+# ---- golden eval -----------------------------------------------------------
 def test_golden_eval():
     """Scorer must reproduce frozen labels at >= 90% (Agent.md §11)."""
     golden = json.loads((Path(__file__).parent / "golden" / "leads.json").read_text())
@@ -186,20 +167,14 @@ def test_webhook_challenge_handshake():
 
 
 # ---- Scoring queue: retry/backoff is wired (offline, no Redis) -------------
-def test_scoring_queue_retry_configured():
-    """The Celery task must retry the LLM with backoff so transient failures
-    are retried for a REAL score rather than silently falling back to rules."""
-    from app.services.tasks import score_and_deliver_task
-    from app.config import settings
-
-    assert score_and_deliver_task is not None
-    assert Exception in (score_and_deliver_task.autoretry_for or ())
-    assert score_and_deliver_task.max_retries == settings.score_max_retries
-    assert score_and_deliver_task.retry_backoff == settings.score_retry_backoff
-
-    # allow_fallback=False during retries => an LLM error raises (so Celery retries)
+def test_scoring_retry_on_llm_failure():
+    """score_lead(allow_fallback=False) must RAISE on LLM failure so the
+    caller's with_retry loop retries for a REAL score instead of silently
+    falling back to rules."""
     from app.services.llm_gateway import score_lead
     from app.models.schemas import LeadInput
+    from app.config import settings
+
     lead = LeadInput(id="Q1", name="x", company="FryCo",
                      source="referral", industry="food service",
                      inquiry_type="request pricing")
