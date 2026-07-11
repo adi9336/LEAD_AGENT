@@ -1,0 +1,119 @@
+# Render infrastructure-as-code (Blueprint).
+# Deploy: push repo to GitHub -> Render -> New -> Blueprint -> connect repo.
+# Render reads this file and creates all services + add-ons below.
+#
+# Two services from ONE Docker image:
+#   web    -> FastAPI (uvicorn) on $PORT  (receives monday webhooks, /audit)
+#   worker -> Celery beat+worker         (scoring queue retry/backoff)
+# Redis (broker) + Postgres (db) are attached as add-ons; their URLs are
+# injected as REDIS_URL / DATABASE_URL automatically.
+
+services:
+  - type: web
+    name: lead-agent-web
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    # ROLE left unset -> Dockerfile CMD defaults to uvicorn (web).
+    healthCheckPath: /health
+    envVars:
+      - key: ADAPTER_MODE
+        value: live
+      - key: ALERT_PROVIDER
+        value: whatsapp
+      - key: USE_LLM
+        sync: false          # auto: on if OPENAI_API_KEY set
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: MONDAY_API_TOKEN
+        sync: false
+      - key: MONDAY_BOARD_ID
+        sync: false
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_API_URL
+        value: https://graph.facebook.com/v19.0
+      - key: ALERT_RECIPIENT_PHONE
+        sync: false
+      - key: REVIEWER_PHONE
+        sync: false
+      - key: ADMIN_TOKEN
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false
+      - key: LANGSMITH_API_KEY
+        sync: false
+      - key: LANGSMITH_PROJECT
+        value: LEAD_AGENT
+      - key: LANGSMITH_TRACING
+        value: "true"
+      - key: LANGSMITH_ENDPOINT
+        value: https://api.smith.langchain.com
+      - key: DATABASE_URL
+        fromDatabase:
+          name: lead-agent-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: lead-agent-redis
+          property: connectionString
+
+  - type: worker
+    name: lead-agent-worker
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: ROLE
+        value: worker
+      - key: ADAPTER_MODE
+        value: live
+      - key: ALERT_PROVIDER
+        value: whatsapp
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: MONDAY_API_TOKEN
+        sync: false
+      - key: MONDAY_BOARD_ID
+        sync: false
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_API_URL
+        value: https://graph.facebook.com/v19.0
+      - key: ALERT_RECIPIENT_PHONE
+        sync: false
+      - key: REVIEWER_PHONE
+        sync: false
+      - key: ADMIN_TOKEN
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false
+      - key: LANGSMITH_API_KEY
+        sync: false
+      - key: LANGSMITH_PROJECT
+        value: LEAD_AGENT
+      - key: LANGSMITH_TRACING
+        value: "true"
+      - key: LANGSMITH_ENDPOINT
+        value: https://api.smith.langchain.com
+      - key: DATABASE_URL
+        fromDatabase:
+          name: lead-agent-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: lead-agent-redis
+          property: connectionString
+
+databases:
+  - name: lead-agent-redis
+    databaseName: lead_agent_redis
+    plan: free           # Redis broker for Celery
+  - name: lead-agent-db
+    databaseName: lead_agent_db
+    plan: free           # Postgres
+    postgresMajorVersion: "16"

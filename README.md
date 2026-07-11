@@ -96,6 +96,33 @@ Steps:
    `openssl rand -hex 24`.
 5. Deploy. The web service health-checks `/health`.
 
+## Deploy (Render)
+
+The repo is Render-ready via `render.yaml` (Blueprint):
+
+- `Dockerfile` builds one image; the `CMD` runs `web` (uvicorn on `$PORT`)
+  by default, or `worker` (Celery beat) when `ROLE=worker`.
+- `render.yaml` declares two services (web + worker) and two add-ons
+  (Postgres + Redis). Redis is the Celery broker for the scoring retry queue;
+  Postgres is the database (`DATABASE_URL` injected automatically).
+
+Steps:
+1. Push the repo to GitHub.
+2. Render dashboard -> New -> Blueprint -> connect the repo. Render reads
+   `render.yaml` and creates `lead-agent-web`, `lead-agent-worker`,
+   `lead-agent-db` (Postgres), `lead-agent-redis` (Redis).
+3. In each service's Environment, set the secret values (marked `sync: false`
+   in `render.yaml`): `OPENAI_API_KEY`, `MONDAY_API_TOKEN`, `MONDAY_BOARD_ID`,
+   `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `ALERT_RECIPIENT_PHONE`,
+   `REVIEWER_PHONE`, `ADMIN_TOKEN`, `WEBHOOK_SECRET`, `LANGSMITH_API_KEY`.
+   Generate strong random values: `openssl rand -hex 24`.
+4. Deploy. The web service health-checks `/health`; the worker consumes the
+   scoring queue from Redis.
+
+Note: with no Redis (or no worker service) the app still runs — scoring falls
+back to inline (synchronous), so local/dev and a web-only deploy work without
+the queue, just without background retry.
+
 ## Go live end-to-end (automatic webhook)
 
 So far leads are scored when you POST to `/webhook/monday` manually. To make
@@ -111,7 +138,7 @@ you doing anything:
    import httpx, os
    from dotenv import load_dotenv; load_dotenv()
    TOKEN=os.getenv("MONDAY_API_TOKEN"); BID=os.getenv("MONDAY_BOARD_ID")
-   URL="<YOUR_PUBLIC_URL>/webhook/monday"   # e.g. https://xxx.railway.app/webhook/monday
+   URL="<YOUR_PUBLIC_URL>/webhook/monday"   # e.g. https://lead-agent-web.onrender.com/webhook/monday
    q='mutation($b:ID!,$u:String!,$e:WebhookEventType!){create_webhook(board_id:$b,url:$u,event:$e){id}}'
    r=httpx.post("https://api.monday.com/v2",
        json={"query":q,"variables":{"b":BID,"u":URL,"e":"create_item"}},
