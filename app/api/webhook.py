@@ -82,5 +82,7 @@ def _extract_lead(body: bytes) -> dict:
         "company": column_values.get("company"),
         "source": column_values.get("source"),
         "industry": column_values.get("industry"),
-        "inquiry_type": column_values.get("inquiry_type"),
+        # Accept either spelling — Beyond Oil's board may use "enquiry" (UK).
+        "inquiry_type": column_values.get("inquiry_type") or column_values.get("enquiry"),
+        "enquiry": column_values.get("enquiry") or column_values.get("inquiry_type"),
     }

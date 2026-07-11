@@ -14,9 +14,11 @@ See `plan.md` (build plan) and `Agent.md` (behavioral spec).
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-export ADAPTER_MODE=mock          # default; uses rules engine + SQLite + mock adapters
-python scripts/simulate.py        # pushes 3 sample leads through the full pipeline
+export ADAPTER_MODE=mock          # integrations stay mocked (no CRM/WhatsApp needed)
+export OPENAI_API_KEY=sk-...      # LLM scoring activates automatically on key presence
+python scripts/simulate.py        # scores via the LLM; CRM/WhatsApp are log-stubs
 ```
+
 
 Then inspect the audit (admin token from `.env`):
 

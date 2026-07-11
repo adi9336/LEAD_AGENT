@@ -5,6 +5,9 @@ All runtime configuration is read from environment variables (and an optional
 dependencies, so this module is safe to import anywhere (tests, CLI, workers).
 """
 
+from typing import Optional
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,8 +26,24 @@ class Settings(BaseSettings):
     )
 
     # ---- Runtime mode ----
-    adapter_mode: str = "mock"      # "mock" | "live"
+    adapter_mode: str = "mock"      # "mock" | "live"  (controls integrations only)
     alert_provider: str = "whatsapp"  # "whatsapp" (Cloud API) | "twilio"
+
+    # LLM scoring: None=auto (use LLM if OPENAI_API_KEY set), True=force, False=force rules.
+    # Declared Optional[bool]; the validator maps ""/"null"/"none" -> None so an
+    # empty USE_LLM= in .env.example does not crash startup.
+    use_llm: Optional[bool] = None
+
+    @field_validator("use_llm", mode="before")
+    @classmethod
+    def _coerce_bool(cls, v):
+        if v is None or v == "" or str(v).lower() in ("null", "none"):
+            return None
+        if str(v).lower() in ("1", "true", "yes", "on"):
+            return True
+        if str(v).lower() in ("0", "false", "no", "off"):
+            return False
+        return None
 
     # ---- Database ----
     # SQLite for local/dev; set a Postgres URL for production (same models).

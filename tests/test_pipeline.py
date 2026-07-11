@@ -45,6 +45,19 @@ def test_rules_cold():
     assert r.tier == "Cold"
 
 
+def test_enquiry_alias():
+    """British-spelling 'enquiry' must be treated as inquiry_type."""
+    lead = LeadInput(
+        id="E1", name="Priya", company="Chips Ltd",
+        source="website", industry="restaurant",
+        enquiry="request demo",  # only the UK spelling provided
+    )
+    assert lead.inquiry_type == "request demo"
+    r = rules_score(lead)
+    assert r.tier == "Hot"        # demo signal should push Hot
+    assert r.classification == "end_customer"
+
+
 def test_rules_distributor():
     r = rules_score(LeadInput(id="3", name="z", company="Distro Inc",
                               source="website", industry="food distribution",

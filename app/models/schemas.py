@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # Allowed closed sets — used by guardrails to reject invalid model output.
 TIERS = ("Hot", "Warm", "Cold")
@@ -25,6 +25,10 @@ class LeadInput(BaseModel):
 
     Only these fields are consumed. Missing optional fields become ``None``;
     the scorer treats ``None`` as "unknown" rather than crashing.
+
+    ``enquiry`` is accepted as a British-spelling alias of ``inquiry_type``
+    (Beyond Oil's monday board may use either). The model validator merges it
+    so every downstream consumer only ever reads ``inquiry_type``.
     """
 
     id: str                                   # monday item id (primary key)
@@ -33,7 +37,15 @@ class LeadInput(BaseModel):
     source: Optional[str] = None
     industry: Optional[str] = None
     inquiry_type: Optional[str] = None
+    enquiry: Optional[str] = None             # alias for inquiry_type (UK spelling)
     created_at: Optional[datetime] = None     # intake time; defaults to now()
+
+    @model_validator(mode="after")
+    def _merge_enquiry(self) -> "LeadInput":
+        """Prefer inquiry_type; fall back to enquiry if inquiry_type is empty."""
+        if not self.inquiry_type and self.enquiry:
+            self.inquiry_type = self.enquiry
+        return self
 
 
 class ScoreResult(BaseModel):

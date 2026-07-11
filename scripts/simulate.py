@@ -27,6 +27,10 @@ SAMPLE_LEADS = [
     LeadInput(id="L3", name="Pat", company="Distro Inc",
               source="website", industry="food distribution",
               inquiry_type="want to distribute"),
+    # Explicitly exercises the British-spelling alias (enquiry).
+    LeadInput(id="L4", name="Priya", company="Chips Ltd",
+              source="website", industry="restaurant",
+              enquiry="request demo"),
 ]
 
 
