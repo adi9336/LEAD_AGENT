@@ -52,6 +52,8 @@ cronJobs:
         value: LEAD_AGENT
       - key: LANGSMITH_TRACING
         value: "true"
+      - key: LANGCHAIN_TRACING_V2
+        value: "true"
       - key: LANGSMITH_ENDPOINT
         value: https://api.smith.langchain.com
       # No DATABASE_URL / REDIS_URL -> SQLite default (audit log only).
