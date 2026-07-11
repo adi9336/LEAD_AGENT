@@ -15,8 +15,9 @@ httpx>=0.27
 # test-suite and local runs need NONE of these installed.
 langchain>=0.2
 langchain-openai>=0.1
+langsmith>=0.1
 
-# ── Scheduler (LAZY-imported: only required for live periodic ───
+# ── Observability (LAZY-imported: only needed when LANGSMITH_TRACING=true) ──
 # scan). The hygiene logic itself is a plain function and is fully
 # unit-tested without Redis/Celery.
 celery>=5.3

@@ -34,6 +34,22 @@ def _use_llm() -> bool:
     return bool(settings.openai_api_key)  # auto: key present -> use LLM
 
 
+def _traceable(fn):
+    """Wrap ``fn`` with LangSmith tracing when the SDK is available.
+
+    LangSmith is optional: if the package isn't installed (or tracing is off)
+    we return the function unchanged so the pipeline never depends on it.
+    Tracing is enabled by the env vars already in ``.env``
+    (LANGSMITH_TRACING=true, LANGSMITH_API_KEY, LANGSMITH_PROJECT).
+    """
+    try:
+        from langsmith import traceable  # lazy import; optional dependency
+        return traceable(name="score_lead")(fn)
+    except Exception:
+        return fn
+
+
+@_traceable
 def score_lead(lead: LeadInput, *, request_id: str | None = None) -> ScoreResult:
     """Score a lead via LLM (if available) with deterministic fallback.
 
