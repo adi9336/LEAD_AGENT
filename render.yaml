@@ -1,34 +1,34 @@
 # Render infrastructure-as-code (Blueprint).
 # Deploy: push repo to GitHub -> Render -> New -> Blueprint -> connect repo.
 #
-# This Blueprint defines TWO services from one image:
+# This Blueprint defines TWO resources from one image:
 #
-#  1. lead-agent-cron (CRON JOB) — runs hourly:
+#  1. lead-agent-cron (CRON JOB, under `jobs:`) — runs hourly:
 #       - fetches leads needing scoring from monday.com
 #       - scores each with the LLM (retried with backoff for a REAL score)
 #       - writes the result back to monday + alerts you on WhatsApp
 #     Then it exits. No always-on server, no Redis, no Postgres -> cheapest.
 #
-#  2. lead-agent-web (WEB SERVICE) — a public URL serving the live
-#     dashboard (/dashboard). It reads straight from monday (the system of
-#     record) so it shows real leads even though cron + web run in
-#     separate containers with separate SQLite files. $7-ish/mo on a
-#     cheap instance; set to Free if you only need it occasionally.
+#  2. lead-agent-web (WEB SERVICE, under `services:`) — a public URL
+#     serving the live dashboard (/dashboard). It reads straight from monday
+#     (the system of record) so it shows real leads even though cron + web
+#     run in separate containers with separate SQLite files.
 #
 # monday is the system of record. The scored state lives in the board's
 # Status column, which fetch_due_leads reads each run, so the local
 # SQLite file is only an audit log (safe to be ephemeral between runs).
 
-cronJobs:
+# ---- Cron job: Render uses `jobs:` with `trigger: schedule` ----------
+jobs:
   - name: lead-agent-cron
-    type: cron
     runtime: docker
     dockerfilePath: ./Dockerfile
+    plan: free
+    trigger: schedule
     # Standard cron schedule: run at minute 0 of every hour.
     schedule: "0 * * * *"
-    # Dockerfile CMD already branches on $ROLE; for the cron we just
-    # run the batch script directly. Plain string (Render expects a string,
-    # not a list, for `command`).
+    # Dockerfile CMD already branches on $ROLE; for the cron we run the
+    # batch script directly. Plain string (Render wants a string, not a list).
     command: "python scripts/cron_run.py"
     envVars:
       - key: ADAPTER_MODE
@@ -69,6 +69,7 @@ cronJobs:
         value: https://api.smith.langchain.com
       # No DATABASE_URL / REDIS_URL -> SQLite default (audit log only).
 
+# ---- Web service: public dashboard --------------------------------
 services:
   - name: lead-agent-web
     type: web
