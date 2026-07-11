@@ -11,6 +11,8 @@ verifiable with zero credentials.
 
 from __future__ import annotations
 
+import json
+
 from abc import ABC, abstractmethod
 
 from app.config import settings
@@ -35,29 +37,46 @@ class MockMonday(MondayClient):
               f"reasons={rationale}")
 
 
+# monday Classification status column uses these exact labels (Title Case, space),
+# which differ from our internal snake_case. Map internal -> board label.
+CLASSIFICATION_LABELS = {
+    "end_customer": "End Customer",
+    "distributor": "Distributor",
+}
+
+
 class LiveMonday(MondayClient):
+    """Writes enrichment back to monday.com via GraphQL.
+
+    Column IDs come from ``settings`` (fetched from the real board). monday
+    status columns expect ``{"label": "..."}``; the numbers column expects a
+    bare int; long-text expects ``{"text": "..."}``. The ``column_values``
+    variable is passed as a JSON *string* (monday's expected format).
+    """
+
     def enrich(self, lead_id: str, *, tier: str, score: int,
                classification: str, rationale: list[str]) -> None:
         import httpx  # lazy import; only needed in live mode
 
+        class_label = CLASSIFICATION_LABELS.get(classification, classification)
+        column_values = {
+            settings.monday_col_status: {"label": tier},            # Hot|Warm|Cold
+            settings.monday_col_score: score,                      # numbers col wants bare int
+            settings.monday_col_classification: {"label": class_label},  # End Customer|Distributor
+            settings.monday_col_rationale: {"text": " | ".join(rationale)},
+        }
         query = """
-        mutation ($bid: ID!, $iid: ID!, $group: JSON) {
+        mutation ($bid: ID!, $iid: ID!, $group: JSON!) {
           change_multiple_column_values(item_id: $iid, board_id: $bid,
             column_values: $group) { id }
         }
         """
-        # Column IDs must match the real board; placeholders shown.
-        column_values = {
-            "score": {"text": str(score)},
-            "tier": {"label": tier},
-            "classification": {"label": classification},
-            "rationale": {"text": " | ".join(rationale)},
-        }
+        # monday expects column_values as a JSON *string* for the JSON! variable.
         resp = httpx.post(
             settings.monday_api_url,
             json={"query": query, "variables": {
-                "bid": settings.monday_board_id, "iid": lead_id,
-                "group": column_values}},
+                "bid": settings.monday_board_id, "iid": str(lead_id),
+                "group": json.dumps(column_values)}},
             headers={"Authorization": f"Bearer {settings.monday_api_token}"},
             timeout=10,
         )
@@ -65,7 +84,11 @@ class LiveMonday(MondayClient):
 
 
 def get_monday_client() -> MondayClient:
-    return LiveMonday() if settings.adapter_mode == "live" else MockMonday()
+    # Live only if explicitly live AND credentials are present; otherwise mock
+    # so the pipeline never hard-fails on a missing CRM connection.
+    if settings.adapter_mode == "live" and settings.monday_api_token and settings.monday_board_id:
+        return LiveMonday()
+    return MockMonday()
 
 
 # ===================== WhatsApp =====================
@@ -125,6 +148,14 @@ class LiveTwilioWhatsApp(WhatsAppClient):
 def get_whatsapp_client() -> WhatsAppClient:
     if settings.adapter_mode != "live":
         return MockWhatsApp()
+    # Live mode: only use the real client if its credentials are present.
+    # Otherwise fall back to the log-only mock so the pipeline doesn't
+    # fail/escalate on a missing alert integration (alerts resume once
+    # credentials are added to .env).
     if settings.alert_provider == "twilio":
-        return LiveTwilioWhatsApp()
-    return LiveCloudWhatsApp()
+        if settings.twilio_account_sid and settings.twilio_auth_token and settings.twilio_from_number:
+            return LiveTwilioWhatsApp()
+        return MockWhatsApp()
+    if settings.whatsapp_token and settings.whatsapp_phone_number_id:
+        return LiveCloudWhatsApp()
+    return MockWhatsApp()

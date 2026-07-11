@@ -62,6 +62,22 @@ class Settings(BaseSettings):
     monday_api_token: str = ""
     monday_board_id: str = ""
     monday_api_url: str = "https://api.monday.com/v2"
+    # Column-ID map (fetched from your board; see curl in README/setup).
+    # READ fields (inbound from webhook):
+    monday_col_name: str = "name"
+    monday_col_company: str = "text_mm55ken1"
+    monday_col_source: str = "text_mm552667"
+    monday_col_industry: str = "text_mm55n0s8"
+    monday_col_enquiry: str = "text_mm5551t0"
+    # Board has a single "Enquiry" text column; map both spellings to it.
+    monday_col_inquiry_type: str = "text_mm5551t0"
+    # WRITE fields (enrichment back to CRM):
+    monday_col_status: str = "color_mm55yz2s"       # Hot/Warm/Cold
+    monday_col_score: str = "numeric_mm552zp2"       # 0-100
+    monday_col_classification: str = "color_mm55bsrk"  # distributor/end_customer
+    monday_col_rationale: str = "long_text_mm551ga"  # reasons
+    # Webhook board subscription challenge secret (optional; monday sends ?challenge=)
+    monday_webhook_challenge: str = ""
 
     # ---- WhatsApp Cloud API (live) ----
     whatsapp_token: str = ""

@@ -113,3 +113,60 @@ def test_golden_eval():
                   f"want {case['expect_tier']}/{case['expect_class']}")
     threshold = 0.9
     assert passed / len(golden) >= threshold, f"eval pass rate {passed}/{len(golden)}"
+
+
+# ---- LiveMonday GraphQL shape (mocked transport, no token) -----------------
+def test_live_monday_enrich_request_shape():
+    """LiveMonday must POST the exact GraphQL mutation + column-value map.
+
+    Uses httpx MockTransport (no network, no token) to assert the request
+    body matches monday's expected shape with the real board column IDs.
+    """
+    import httpx
+    from app.services.clients import LiveMonday
+    from app.config import settings
+
+    captured = {}
+
+    def _handler(request):
+        captured["url"] = str(request.url)
+        captured["body"] = request.content.decode()
+        captured["auth"] = request.headers.get("Authorization")
+        return httpx.Response(200, json={"data": {"change_multiple_column_values": {"id": "1"}}})
+
+    client = LiveMonday()
+    with httpx.Client(transport=httpx.MockTransport(_handler)) as mock:
+        # Patch the lazy httpx.post used inside enrich by monkeypatching the module's import.
+        import app.services.clients as clients
+        orig_post = httpx.post
+        httpx.post = lambda *a, **k: mock.post(*a, **k)  # route to mock
+        try:
+            client.enrich("123", tier="Hot", score=90,
+                          classification="end_customer",
+                          rationale=["core industry", "referral"])
+        finally:
+            httpx.post = orig_post
+
+    # Assertions on the captured GraphQL payload (group is a JSON *string* per monday API)
+    body = json.loads(captured["body"])
+    assert "change_multiple_column_values" in body["query"]
+    vars_ = body["variables"]
+    assert vars_["bid"] == settings.monday_board_id
+    assert vars_["iid"] == "123"
+    cv = json.loads(vars_["group"])
+    assert cv[settings.monday_col_status] == {"label": "Hot"}
+    assert cv[settings.monday_col_score] == 90
+    assert cv[settings.monday_col_classification] == {"label": "End Customer"}
+    assert cv[settings.monday_col_rationale] == {"text": "core industry | referral"}
+    assert captured["auth"] == f"Bearer {settings.monday_api_token}"
+
+
+# ---- Webhook GET challenge (monday subscription handshake) -----------------
+def test_webhook_challenge_handshake():
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    c = TestClient(app)
+    r = c.get("/webhook/monday", params={"challenge": "abc123"})
+    assert r.status_code == 200
+    assert r.json() == {"challenge": "abc123"}

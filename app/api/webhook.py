@@ -22,6 +22,17 @@ from app.services.lead_service import process_lead
 router = APIRouter()
 
 
+@router.get("/webhook/monday")
+async def webhook_monday_challenge(challenge: str | None = None):
+    """monday.com webhook subscription handshake.
+
+    When you create a webhook via the API, monday immediately GETs this URL
+    with a `?challenge=...` param and expects the same value echoed back as
+    JSON: {"challenge": "..."}. Without this, the webhook fails to register.
+    """
+    return {"challenge": challenge}
+
+
 def _verify_secret(payload: bytes, signature: str | None) -> None:
     """Reject requests whose shared secret does not match (dev: empty = allow)."""
     if not settings.webhook_secret:
@@ -64,25 +75,28 @@ async def webhook_monday(
 def _extract_lead(body: bytes) -> dict:
     """Parse monday webhook JSON into LeadInput fields.
 
-    monday.com webhooks nest the item under `event.data.itemData` (or similar).
-    We read the common fields and tolerate missing optional ones.
+    monday.com webhooks nest the item under ``event.data.itemData`` (current
+    API) or a top-level ``item`` (older). Column values are keyed by the
+    board's real column IDs, so we map them via ``settings.monday_col_*``
+    rather than assuming generic names.
     """
     import json
 
     msg = json.loads(body)
     item = msg.get("event", {}).get("data", {}).get("itemData") or msg.get("item", {})
-    column_values = {
-        cv.get("id"): cv.get("text") or cv.get("value")
-        for cv in item.get("column_values", [])
-        if isinstance(cv, dict)
+    cv = {
+        c.get("id"): c.get("text") or c.get("value")
+        for c in item.get("column_values", [])
+        if isinstance(c, dict)
     }
+    name = cv.get(settings.monday_col_name) or item.get("name", "Unknown")
     return {
         "id": str(item.get("id")),
-        "name": item.get("name", "Unknown"),
-        "company": column_values.get("company"),
-        "source": column_values.get("source"),
-        "industry": column_values.get("industry"),
-        # Accept either spelling — Beyond Oil's board may use "enquiry" (UK).
-        "inquiry_type": column_values.get("inquiry_type") or column_values.get("enquiry"),
-        "enquiry": column_values.get("enquiry") or column_values.get("inquiry_type"),
+        "name": name,
+        "company": cv.get(settings.monday_col_company),
+        "source": cv.get(settings.monday_col_source),
+        "industry": cv.get(settings.monday_col_industry),
+        # Accept either spelling — Beyond Oil's board uses "enquiry" (UK).
+        "inquiry_type": cv.get(settings.monday_col_enquiry) or cv.get(settings.monday_col_inquiry_type),
+        "enquiry": cv.get(settings.monday_col_enquiry) or cv.get(settings.monday_col_inquiry_type),
     }
