@@ -18,7 +18,7 @@ load_dotenv()
 
 from fastapi import FastAPI
 
-from app.api import routes, webhook
+from app.api import dashboard, routes, webhook
 from app.database.session import init_db
 
 
@@ -40,6 +40,8 @@ def create_app() -> FastAPI:
     app.include_router(webhook.router)
     # Admin / audit (token-protected)
     app.include_router(routes.router)
+    # Client-facing live dashboard (read-only HTML)
+    app.include_router(dashboard.router)
     return app
 
 
