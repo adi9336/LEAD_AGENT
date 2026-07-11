@@ -18,13 +18,13 @@
 # Status column, which fetch_due_leads reads each run, so the local
 # SQLite file is only an audit log (safe to be ephemeral between runs).
 
-# ---- Cron job: Render uses `jobs:` with `trigger: schedule` ----------
+# ---- Cron job: Render uses `jobs:` with `type: cron` ----------
 jobs:
   - name: lead-agent-cron
+    type: cron
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: free
-    trigger: schedule
     # Standard cron schedule: run at minute 0 of every hour.
     schedule: "0 * * * *"
     # Dockerfile CMD already branches on $ROLE; for the cron we run the
