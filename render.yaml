@@ -26,8 +26,10 @@ cronJobs:
     dockerfilePath: ./Dockerfile
     # Standard cron schedule: run at minute 0 of every hour.
     schedule: "0 * * * *"
-    # The image's CMD runs uvicorn by default; override it for the cron run.
-    command: ["sh", "-c", "python scripts/cron_run.py"]
+    # Dockerfile CMD already branches on $ROLE; for the cron we just
+    # run the batch script directly. Plain string (Render expects a string,
+    # not a list, for `command`).
+    command: "python scripts/cron_run.py"
     envVars:
       - key: ADAPTER_MODE
         value: live
