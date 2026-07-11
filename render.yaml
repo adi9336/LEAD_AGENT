@@ -1,20 +1,24 @@
 # Render infrastructure-as-code (Blueprint).
 # Deploy: push repo to GitHub -> Render -> New -> Blueprint -> connect repo.
-# Render reads this file and creates all services + add-ons below.
 #
-# Two services from ONE Docker image:
-#   web    -> FastAPI (uvicorn) on $PORT  (receives monday webhooks, /audit)
-#   worker -> Celery beat+worker         (scoring queue retry/backoff)
-# Redis (broker) + Postgres (db) are attached as add-ons; their URLs are
-# injected as REDIS_URL / DATABASE_URL automatically.
+# This is a CRON-JOB deployment (not a 24/7 web service). Every hour the job:
+#   1. fetches leads that still need scoring from monday.com
+#   2. scores each with the LLM (retried with backoff for a REAL score)
+#   3. writes the result back to monday + alerts you on WhatsApp
+# Then it exits. No always-on server, no Redis, no Postgres add-on -> cheapest.
+#
+# Note: monday is the system of record. The scored/unscored state lives in the
+# board's Status column, which fetch_due_leads reads each run, so the local
+# SQLite file is only an audit log (safe to be ephemeral between runs).
 
-services:
-  - type: web
-    name: lead-agent-web
+cronJobs:
+  - name: lead-agent-cron
     runtime: docker
     dockerfilePath: ./Dockerfile
-    # ROLE left unset -> Dockerfile CMD defaults to uvicorn (web).
-    healthCheckPath: /health
+    # Standard cron schedule: run at minute 0 of every hour.
+    schedule: "0 * * * *"
+    # The image's CMD runs uvicorn by default; override it for the cron run.
+    command: ["sh", "-c", "python scripts/cron_run.py"]
     envVars:
       - key: ADAPTER_MODE
         value: live
@@ -50,70 +54,4 @@ services:
         value: "true"
       - key: LANGSMITH_ENDPOINT
         value: https://api.smith.langchain.com
-      - key: DATABASE_URL
-        fromDatabase:
-          name: lead-agent-db
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: lead-agent-redis
-          property: connectionString
-
-  - type: worker
-    name: lead-agent-worker
-    runtime: docker
-    dockerfilePath: ./Dockerfile
-    envVars:
-      - key: ROLE
-        value: worker
-      - key: ADAPTER_MODE
-        value: live
-      - key: ALERT_PROVIDER
-        value: whatsapp
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: MONDAY_API_TOKEN
-        sync: false
-      - key: MONDAY_BOARD_ID
-        sync: false
-      - key: WHATSAPP_TOKEN
-        sync: false
-      - key: WHATSAPP_PHONE_NUMBER_ID
-        sync: false
-      - key: WHATSAPP_API_URL
-        value: https://graph.facebook.com/v19.0
-      - key: ALERT_RECIPIENT_PHONE
-        sync: false
-      - key: REVIEWER_PHONE
-        sync: false
-      - key: ADMIN_TOKEN
-        sync: false
-      - key: WEBHOOK_SECRET
-        sync: false
-      - key: LANGSMITH_API_KEY
-        sync: false
-      - key: LANGSMITH_PROJECT
-        value: LEAD_AGENT
-      - key: LANGSMITH_TRACING
-        value: "true"
-      - key: LANGSMITH_ENDPOINT
-        value: https://api.smith.langchain.com
-      - key: DATABASE_URL
-        fromDatabase:
-          name: lead-agent-db
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: lead-agent-redis
-          property: connectionString
-
-databases:
-  - name: lead-agent-redis
-    databaseName: lead_agent_redis
-    plan: free           # Redis broker for Celery
-  - name: lead-agent-db
-    databaseName: lead_agent_db
-    plan: free           # Postgres
-    postgresMajorVersion: "16"
+      # No DATABASE_URL / REDIS_URL -> SQLite default (audit log only).

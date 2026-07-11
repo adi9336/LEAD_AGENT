@@ -16,16 +16,21 @@ import json
 from abc import ABC, abstractmethod
 
 from app.config import settings
+from app.models.schemas import LeadInput
 
 
 # ===================== monday.com =====================
 class MondayClient(ABC):
-    """Interface for CRM enrichment."""
+    """Interface for CRM enrichment + lead fetching."""
 
     @abstractmethod
     def enrich(self, lead_id: str, *, tier: str, score: int,
                classification: str, rationale: list[str]) -> None:
         """Write score/classification/rationale back to the monday item."""
+
+    @abstractmethod
+    def fetch_due_leads(self) -> list[LeadInput]:
+        """Return leads that still need scoring (Status column empty)."""
 
 
 class MockMonday(MondayClient):
@@ -35,6 +40,10 @@ class MockMonday(MondayClient):
         print(f"[MockMonday] enrich item={lead_id} "
               f"tier={tier} score={score} class={classification} "
               f"reasons={rationale}")
+
+    def fetch_due_leads(self) -> list[LeadInput]:
+        # No network in mock mode; the cron run simply has nothing to do.
+        return []
 
 
 # monday Classification status column uses these exact labels (Title Case, space),
@@ -81,6 +90,55 @@ class LiveMonday(MondayClient):
             timeout=10,
         )
         resp.raise_for_status()
+
+    def fetch_due_leads(self) -> list[LeadInput]:
+        import httpx
+
+        # Pull items with their column values; keep only those whose Status
+        # (color_mm55yz2s) column is still empty -> "needs scoring".
+        query = """
+        query ($b: ID!) {
+          boards(ids: [$b]) {
+            items_page(limit: 100) {
+              items {
+                id
+                name
+                column_values {
+                  id
+                  text
+                  ... on StatusValue { label }
+                }
+              }
+            }
+          }
+        }
+        """
+        resp = httpx.post(
+            settings.monday_api_url,
+            json={"query": query, "variables": {"b": settings.monday_board_id}},
+            headers={"Authorization": f"Bearer {settings.monday_api_token}"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json().get("data", {})
+        items = (data.get("boards") or [{}])[0] \
+            .get("items_page", {}).get("items", [])
+
+        due: list[LeadInput] = []
+        for item in items:
+            cols = {c["id"]: (c.get("label") or c.get("text")) for c in item["column_values"]}
+            # Already scored? Skip (Status column has a label).
+            if cols.get(settings.monday_col_status):
+                continue
+            due.append(LeadInput(
+                id=item["id"],
+                name=item.get("name"),
+                company=cols.get(settings.monday_col_company),
+                source=cols.get(settings.monday_col_source),
+                industry=cols.get(settings.monday_col_industry),
+                inquiry_type=cols.get(settings.monday_col_inquiry_type),
+            ))
+        return due
 
 
 def get_monday_client() -> MondayClient:

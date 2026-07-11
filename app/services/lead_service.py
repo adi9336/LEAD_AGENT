@@ -58,12 +58,14 @@ def _event(db: Session, lead_id: str | None, event: str, status: str,
     db.commit()
 
 
-def intake_lead(db: Session, lead_in: LeadInput, *, request_id: str | None = None) -> Lead:
-    """Persist the lead and enqueue scoring. Returns the (pending) Lead.
+def intake_lead(db: Session, lead_in: LeadInput, *, request_id: str | None = None,
+               enqueue: bool = True) -> Lead:
+    """Persist the lead and enqueue scoring (default). Returns the (pending) Lead.
 
-    This is the synchronous, webhook-facing step: it only does the cheap,
-    local work (DB upsert) then hands scoring to the queue so the HTTP
-    request returns fast and LLM failures can be retried off the request path.
+    Args:
+        enqueue: when True (default, webhook path) scoring is pushed to the
+            Celery queue (or run inline if no broker). When False (cron path)
+            the caller runs ``score_and_deliver`` itself, so we don't double-run.
     """
     rid = request_id
 
@@ -86,8 +88,9 @@ def intake_lead(db: Session, lead_in: LeadInput, *, request_id: str | None = Non
     log("intake", request_id=rid, lead_id=lead.id)
 
     # 2. Enqueue scoring (or run inline if no queue available).
-    from app.services.tasks import enqueue_scoring
-    enqueue_scoring(lead.id, request_id=rid)
+    if enqueue:
+        from app.services.tasks import enqueue_scoring
+        enqueue_scoring(lead.id, request_id=rid)
 
     return lead
 
@@ -108,11 +111,20 @@ def score_and_deliver(db: Session, lead_id: str, *, request_id: str | None = Non
         log("scored", request_id=rid, lead_id=lead_id, error="lead_not_found")
         return None
 
-    # 1. Score (real LLM; retried by Celery before reaching here on failure).
-    #    allow_fallback=False keeps retries honest; the task wrapper allows
-    #    fallback only on the last attempt (see tasks.score_and_deliver_task).
-    result = score_lead(LeadInput(**_lead_fields(lead)), request_id=rid,
-                        allow_fallback=allow_fallback)
+    # 1. Score (real LLM; retried with backoff for a REAL score before any
+    #    fallback). allow_fallback=False keeps retries honest; on the final
+    #    exhausted attempt we re-score with rules as the safety net.
+    lead_input = LeadInput(**_lead_fields(lead))
+    try:
+        result = with_retry(
+            lambda: score_lead(lead_input, request_id=rid, allow_fallback=False),
+            max_attempts=settings.score_max_retries,
+            base_delay=settings.score_retry_backoff,
+            request_id=rid, event="scored",
+        )
+    except Exception:
+        # All LLM retries failed -> fall back to rules so the lead is scored.
+        result = score_lead(lead_input, request_id=rid, allow_fallback=True)
     lead.score = result.score
     lead.tier = result.tier
     lead.classification = result.classification
@@ -167,8 +179,45 @@ def _lead_fields(lead: Lead) -> dict:
     }
 
 
+def run_cron(db: Session, *, request_id: str | None = None) -> dict:
+    """Hourly cron entry point.
+
+    Fetches leads that still need scoring from monday, then scores+delivers
+    each. Scoring retries the LLM with exponential backoff (via score_lead's
+    allow_fallback=False + this loop) so transient LLM failures get a REAL
+    score rather than the rules fallback. Only after local retries are
+    exhausted does a lead fall back to rules, so it is never left unscored.
+
+    Returns a small report for logs/monitoring.
+    """
+    from app.config import settings
+    from app.services.clients import get_monday_client
+
+    rid = request_id or f"cron-{_now().strftime('%Y%m%d%H%M')}"
+    monday = get_monday_client()
+    due = monday.fetch_due_leads()
+    scored = 0
+    failed = 0
+    for lead_in in due:
+        try:
+            # Persist (idempotent) then score+deliver. score_and_deliver
+            # retries the LLM internally; allow_fallback=False keeps retries
+            # honest, True only here as the final safety net.
+            intake_lead(db, lead_in, request_id=f"{rid}-{lead_in.id}",
+                        enqueue=False)
+            score_and_deliver(db, lead_in.id,
+                              request_id=f"{rid}-{lead_in.id}",
+                              allow_fallback=True)
+            scored += 1
+        except Exception as exc:  # noqa: BLE001
+            failed += 1
+            log("cron_item_failed", request_id=rid, lead_id=lead_in.id,
+                error=type(exc).__name__)
+    log("cron_run", request_id=rid, due=len(due), scored=scored, failed=failed)
+    return {"due": len(due), "scored": scored, "failed": failed}
+
+
 def _escalate(db: Session, lead: Lead, rid: str | None, *, reason: str) -> None:
-    """Escalate a lead to the reviewer (one-time flag)."""
     if lead.escalated:
         return
     whatsapp = get_whatsapp_client()
