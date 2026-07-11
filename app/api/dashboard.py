@@ -62,18 +62,38 @@ def _rationale_text(raw: str | None) -> str:
 
 @router.get("/dashboard", response_class=HTMLResponse)
 def dashboard(db: Session = Depends(get_session)):
-    leads = (
-        db.query(Lead)
-        .filter(Lead.deleted_at.is_(None))
-        .order_by(Lead.scored_at.is_(None), Lead.scored_at.desc())
-        .all()
-    )
+    # SOURCE OF TRUTH:
+    #  - LIVE mode (deployed cron writes to monday): read straight from the
+    #    monday board via the client, so the dashboard reflects the system of
+    #    record even though cron + web run in separate containers (separate
+    #    SQLite files).
+    #  - MOCK/LOCAL: read the local audit DB (the cron's data lives there).
+    from app.services.clients import get_monday_client
+
+    live = get_monday_client()
+    try:
+        leads_raw = live.fetch_all_leads()
+        source = "monday"
+    except Exception:
+        # network/cred issue -> fall back to local SQLite audit log
+        leads_raw = db.query(Lead).filter(Lead.deleted_at.is_(None)).all()
+        source = "local"
+
+    # unified accessor: monday rows are dicts, local rows are ORM objects
+    if source == "monday":
+        def _get(l, k):
+            return l.get(k)
+    else:
+        def _get(l, k):
+            return getattr(l, k, None)
+    leads = leads_raw
+
     total = len(leads)
-    hot = sum(1 for l in leads if l.tier == "Hot")
-    warm = sum(1 for l in leads if l.tier == "Warm")
-    cold = sum(1 for l in leads if l.tier == "Cold")
-    scored = sum(1 for l in leads if l.scored_at is not None)
-    alerts = sum(1 for l in leads if l.alert_sent)
+    hot = sum(1 for l in leads if _get(l, "tier") == "Hot")
+    warm = sum(1 for l in leads if _get(l, "tier") == "Warm")
+    cold = sum(1 for l in leads if _get(l, "tier") == "Cold")
+    scored = sum(1 for l in leads if _get(l, "score") is not None)
+    alerts = sum(1 for l in leads if _get(l, "alert_sent"))
 
     last_run = (
         db.query(EventLog)
@@ -86,23 +106,24 @@ def dashboard(db: Session = Depends(get_session)):
     # --- build the leads table rows ---
     rows = []
     for l in leads[:50]:
-        tier = l.tier or "—"
-        color = _TIER_COLOR.get(l.tier or "", "#64748b")
+        tier = _get(l, "tier") or "—"
+        color = _TIER_COLOR.get(tier, "#64748b")
         badge = (
             f'<span class="badge" style="background:{color}1a;color:{color};'
             f'border:1px solid {color}55">{html.escape(tier)}</span>'
         )
-        score = f"{l.score}" if l.score is not None else "—"
+        score = f"{_get(l, 'score')}" if _get(l, "score") is not None else "—"
+        rationale = _rationale_text(_get(l, "rationale"))
         rows.append(
             "<tr>"
-            f"<td class='name'>{html.escape(l.name or '—')}</td>"
-            f"<td>{html.escape(l.company or '—')}</td>"
-            f"<td>{html.escape(l.industry or '—')}</td>"
+            f"<td class='name'>{html.escape(_get(l, 'name') or '—')}</td>"
+            f"<td>{html.escape(_get(l, 'company') or '—')}</td>"
+            f"<td>{html.escape(_get(l, 'industry') or '—')}</td>"
             f"<td style='text-align:center'>{badge}</td>"
             f"<td style='text-align:center;font-weight:700'>{score}</td>"
-            f"<td class='rationale'>{html.escape(_rationale_text(l.rationale))}</td>"
-            f"<td class='muted'>{'✓' if l.alert_sent else '—'}</td>"
-            f"<td class='muted'>{_fmt(l.scored_at)}</td>"
+            f"<td class='rationale'>{html.escape(rationale)}</td>"
+            f"<td class='muted'>{'✓' if _get(l, 'alert_sent') else '—'}</td>"
+            f"<td class='muted'>{_fmt(_get(l, 'scored_at'))}</td>"
             "</tr>"
         )
     rows_html = "\n".join(rows) or (

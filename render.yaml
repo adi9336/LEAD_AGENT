@@ -1,14 +1,22 @@
 # Render infrastructure-as-code (Blueprint).
 # Deploy: push repo to GitHub -> Render -> New -> Blueprint -> connect repo.
 #
-# This is a CRON-JOB deployment (not a 24/7 web service). Every hour the job:
-#   1. fetches leads that still need scoring from monday.com
-#   2. scores each with the LLM (retried with backoff for a REAL score)
-#   3. writes the result back to monday + alerts you on WhatsApp
-# Then it exits. No always-on server, no Redis, no Postgres add-on -> cheapest.
+# This Blueprint defines TWO services from one image:
 #
-# Note: monday is the system of record. The scored/unscored state lives in the
-# board's Status column, which fetch_due_leads reads each run, so the local
+#  1. lead-agent-cron (CRON JOB) — runs hourly:
+#       - fetches leads needing scoring from monday.com
+#       - scores each with the LLM (retried with backoff for a REAL score)
+#       - writes the result back to monday + alerts you on WhatsApp
+#     Then it exits. No always-on server, no Redis, no Postgres -> cheapest.
+#
+#  2. lead-agent-web (WEB SERVICE) — a public URL serving the live
+#     dashboard (/dashboard). It reads straight from monday (the system of
+#     record) so it shows real leads even though cron + web run in
+#     separate containers with separate SQLite files. $7-ish/mo on a
+#     cheap instance; set to Free if you only need it occasionally.
+#
+# monday is the system of record. The scored state lives in the board's
+# Status column, which fetch_due_leads reads each run, so the local
 # SQLite file is only an audit log (safe to be ephemeral between runs).
 
 cronJobs:
@@ -57,3 +65,44 @@ cronJobs:
       - key: LANGSMITH_ENDPOINT
         value: https://api.smith.langchain.com
       # No DATABASE_URL / REDIS_URL -> SQLite default (audit log only).
+
+services:
+  - name: lead-agent-web
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    # Serve the FastAPI app (dashboard) instead of running the cron.
+    envVars:
+      - key: ROLE
+        value: web
+      - key: ADAPTER_MODE
+        value: live
+      - key: USE_LLM
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: MONDAY_API_TOKEN
+        sync: false
+      - key: MONDAY_BOARD_ID
+        sync: false
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: ALERT_RECIPIENT_PHONE
+        sync: false
+      - key: REVIEWER_PHONE
+        sync: false
+      - key: ADMIN_TOKEN
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false
+      - key: LANGSMITH_API_KEY
+        sync: false
+      - key: LANGSMITH_PROJECT
+        value: LEAD_AGENT
+      - key: LANGSMITH_TRACING
+        value: "true"
+      - key: LANGCHAIN_TRACING_V2
+        value: "true"
+      - key: LANGSMITH_ENDPOINT
+        value: https://api.smith.langchain.com

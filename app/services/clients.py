@@ -32,6 +32,15 @@ class MondayClient(ABC):
     def fetch_due_leads(self) -> list[LeadInput]:
         """Return leads that still need scoring (Status column empty)."""
 
+    @abstractmethod
+    def fetch_all_leads(self) -> list[dict]:
+        """Return every lead on the board with its scored columns, newest first.
+
+        Each dict: id, name, company, source, industry, inquiry_type, tier,
+        score, classification, rationale. Used by the dashboard so it reads
+        from monday (the system of record) rather than container-local SQLite.
+        """
+
 
 class MockMonday(MondayClient):
     def enrich(self, lead_id: str, *, tier: str, score: int,
@@ -43,6 +52,10 @@ class MockMonday(MondayClient):
 
     def fetch_due_leads(self) -> list[LeadInput]:
         # No network in mock mode; the cron run simply has nothing to do.
+        return []
+
+    def fetch_all_leads(self) -> list[dict]:
+        # No network in mock mode.
         return []
 
 
@@ -139,6 +152,64 @@ class LiveMonday(MondayClient):
                 inquiry_type=cols.get(settings.monday_col_inquiry_type),
             ))
         return due
+
+    def fetch_all_leads(self) -> list[dict]:
+        import httpx
+
+        # Pull every item with its scored columns. monday returns column
+        # values keyed by column id; map them back to friendly field names.
+        query = """
+        query ($b: ID!) {
+          boards(ids: [$b]) {
+            items_page(limit: 100) {
+              items {
+                id
+                name
+                column_values {
+                  id
+                  text
+                  ... on StatusValue { label }
+                }
+              }
+            }
+          }
+        }
+        """
+        resp = httpx.post(
+            settings.monday_api_url,
+            json={"query": query, "variables": {"b": settings.monday_board_id}},
+            headers={"Authorization": f"Bearer {settings.monday_api_token}"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json().get("data", {})
+        items = (data.get("boards") or [{}])[0] \
+            .get("items_page", {}).get("items", [])
+
+        leads: list[dict] = []
+        for item in items:
+            cols = {c["id"]: (c.get("label") or c.get("text"))
+                    for c in item["column_values"]}
+            score_raw = cols.get(settings.monday_col_score)
+            try:
+                score = int(score_raw) if score_raw not in (None, "") else None
+            except (TypeError, ValueError):
+                score = None
+            leads.append({
+                "id": item["id"],
+                "name": item.get("name"),
+                "company": cols.get(settings.monday_col_company),
+                "source": cols.get(settings.monday_col_source),
+                "industry": cols.get(settings.monday_col_industry),
+                "inquiry_type": cols.get(settings.monday_col_inquiry_type),
+                "tier": cols.get(settings.monday_col_status),
+                "score": score,
+                "classification": cols.get(settings.monday_col_classification),
+                "rationale": cols.get(settings.monday_col_rationale),
+            })
+        # Newest first by item id (monday ids are monotonic).
+        leads.sort(key=lambda d: d["id"], reverse=True)
+        return leads
 
 
 def get_monday_client() -> MondayClient:
