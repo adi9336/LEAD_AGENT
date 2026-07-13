@@ -241,11 +241,22 @@ class LiveCloudWhatsApp(WhatsAppClient):
         import httpx
 
         url = f"{settings.whatsapp_api_url}/{settings.whatsapp_phone_number_id}/messages"
+        # Use an approved template, not free-text. On WhatsApp Cloud (esp. a
+        # test number) free-text only delivers to allow-listed / 24h-windowed
+        # recipients; Meta accepts free-text to cold leads but silently drops it.
+        # A template (hello_world is pre-approved for the test number) delivers
+        # to anyone. The default hello_world takes NO body params, so we
+        # send the scored-lead summary as the alert's own text via the
+        # template's static body; if you later add a {{1}} variable to the
+        # template, switch components back on.
         payload = {
             "messaging_product": "whatsapp",
             "to": to_phone,
-            "type": "text",
-            "text": {"preview_url": False, "body": message},
+            "type": "template",
+            "template": {
+                "name": "hello_world",
+                "language": {"code": "en_US"},
+            },
         }
         resp = httpx.post(
             url, json=payload,
