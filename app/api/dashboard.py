@@ -28,6 +28,35 @@ from app.database.session import get_session
 
 router = APIRouter()
 
+
+@router.post("/dashboard/run")
+def dashboard_run_cron():
+    """Trigger a single cron run (fetch -> score -> write -> alert).
+
+Read-only dashboard stays read-only, but exposing a one-click
+"run now" is handy for demos/client walkthroughs. Runs the
+real pipeline; returns the run summary.
+    """
+    import threading
+
+    from scripts.cron_run import main as run_cron
+    result: dict = {}
+
+    def _go():
+        try:
+            result["summary"] = run_cron()
+        except Exception as e:  # surface errors instead of hanging
+            result["error"] = f"{type(e).__name__}: {e}"
+
+    t = threading.Thread(target=_go, daemon=True)
+    t.start()
+    t.join(timeout=280)
+    if t.is_alive():
+        return {"status": "timeout", "detail": "cron run exceeded 280s"}
+    if "error" in result:
+        return {"status": "error", "detail": result["error"]}
+    return {"status": "ok", "summary": result.get("summary")}
+
 _TIER_COLOR = {"Hot": "#ef4444", "Warm": "#f59e0b", "Cold": "#3b82f6"}
 
 
@@ -191,6 +220,10 @@ def dashboard(db: Session = Depends(get_session)):
   .muted {{ color:#64748b; text-align:center; }}
   .badge {{ padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; }}
   footer {{ margin-top:24px; color:#475569; font-size:12px; text-align:center; }}
+  button#runbtn {{ background:#22c55e; color:#04210f; border:none; border-radius:10px;
+    padding:10px 18px; font-size:13px; font-weight:700; cursor:pointer; }}
+  button#runbtn:hover {{ background:#16a34a; }}
+  button#runbtn:disabled {{ opacity:.5; cursor:not-allowed; }}
 </style></head>
 <body><div class="wrap">
   <header>
@@ -198,8 +231,13 @@ def dashboard(db: Session = Depends(get_session)):
       <h1>Lead Qualification Agent <span class="dot">●</span></h1>
       <div class="sub">Autonomous lead scoring · monday.com → LLM → WhatsApp · last run {last_run_txt}</div>
     </div>
-    <div class="live"><span class="pulse"></span> LIVE · auto-refresh 30s</div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <button id="runbtn" onclick="runCron()">▶ Run cron now</button>
+      <div class="live"><span class="pulse"></span> LIVE · auto-refresh 30s</div>
+    </div>
   </header>
+  <div id="runresult" style="display:none;margin-bottom:20px;padding:16px 20px;
+       border-radius:12px;font-size:13px;font-family:monospace"></div>
   <div class="stats">{stats}</div>
   <div class="card">
     <h2>Recently scored leads</h2>
@@ -213,4 +251,36 @@ def dashboard(db: Session = Depends(get_session)):
     </table>
   </div>
   <footer>Beyond Oil · Lead Agent · powered by FastAPI + LangChain · {datetime.now(timezone.utc):%Y-%m-%d %H:%M UTC}</footer>
+  <script>
+  async function runCron() {{
+    const btn = document.getElementById('runbtn');
+    const box = document.getElementById('runresult');
+    btn.disabled = true; btn.textContent = '⏳ Running…';
+    box.style.display = 'block';
+    box.style.background = '#111a2e';
+    box.style.border = '1px solid #1e293b';
+    box.textContent = 'Fetching leads → scoring → writing to monday → alerting… (this can take a minute)';
+    try {{
+      const r = await fetch('/dashboard/run', {{method:'POST'}});
+      const d = await r.json();
+      if (d.status === 'ok') {{
+        const s = d.summary || {{}};
+        box.style.background = '#14532d22';
+        box.style.border = '1px solid #22c55e55';
+        box.textContent = '[cron] due=' + (s.due??0) + ' scored=' + (s.scored??0) +
+          ' failed=' + (s.failed??0);
+      }} else {{
+        box.style.background = '#7f1d1d22';
+        box.style.border = '1px solid #ef444455';
+        box.textContent = 'Error: ' + (d.detail || 'unknown');
+      }}
+    }} catch (e) {{
+      box.style.background = '#7f1d1d22';
+      box.style.border = '1px solid #ef444455';
+      box.textContent = 'Request failed: ' + e;
+    }}
+    btn.disabled = false; btn.textContent = '▶ Run cron now';
+    setTimeout(() => location.reload(), 1500);  // refresh table with new scores
+  }}
+  </script>
 </div></body></html>""")
