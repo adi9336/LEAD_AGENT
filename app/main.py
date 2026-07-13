@@ -18,7 +18,7 @@ load_dotenv()
 
 from fastapi import FastAPI
 
-from app.api import dashboard, routes, webhook
+from app.api import cron, dashboard, routes, webhook
 from app.database.session import init_db
 
 
@@ -38,6 +38,8 @@ def create_app() -> FastAPI:
     )
     # Public intake + health
     app.include_router(webhook.router)
+    # Cron trigger (GitHub Actions / scheduler -> /api/cron)
+    app.include_router(cron.router)
     # Admin / audit (token-protected)
     app.include_router(routes.router)
     # Client-facing live dashboard (read-only HTML)

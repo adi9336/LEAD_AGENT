@@ -1,6 +1,13 @@
 # ============================================================
-# Dockerfile — single image, runs the hourly cron job (or the
-# optional web API if ROLE=web is set).
+# Dockerfile — single image that serves the FastAPI web app.
+#
+# The hourly batch is triggered over HTTP by an EXTERNAL scheduler
+# (GitHub Actions `schedule: '0 * * * *'` hitting /api/cron), so the
+# container only runs the web server. This keeps the deployment on
+# Render's FREE web tier — no paid worker needed.
+#
+# Build args let the same image serve either role if desired, but the
+# default CMD serves the web API on $PORT.
 # ============================================================
 FROM python:3.11-slim
 
@@ -13,8 +20,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy app source
 COPY . .
 
-# Default: run the hourly cron batch. If ROLE=web, serve the FastAPI app on
-# $PORT (optional instant-scoring fast-path). No Celery/Redis needed.
-CMD ["sh", "-c", "if [ \"$ROLE\" = \"web\" ]; then \
-      uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}; \
-      else python scripts/cron_run.py; fi"]
+# Serve the FastAPI app. $PORT is injected by the platform.
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

@@ -1,0 +1,36 @@
+name: Hourly lead-agent cron
+
+on:
+  schedule:
+    # Every hour, at minute 0 (UTC). GitHub Actions is the FREE scheduler
+    # that replaces the old paid Render worker — it just fires /api/cron.
+    - cron: "0 * * * *"
+  workflow_dispatch: {}   # allow manual "Run workflow" from the Actions tab
+
+permissions:
+  contents: read
+
+jobs:
+  cron:
+    runs-on: ubuntu-latest
+    # 5 min is plenty for a single HTTP trigger (the work runs server-side).
+    timeout-minutes: 5
+    steps:
+      - name: Trigger /api/cron
+        env:
+          CRON_URL: ${{ secrets.CRON_URL }}        # e.g. https://lead-agent-web.onrender.com/api/cron
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}  # matches CRON_SECRET on Render (optional)
+        run: |
+          set -euo pipefail
+          if [ -z "${CRON_URL:-}" ]; then
+            echo "::error::CRON_URL secret not set. Add it in repo Settings -> Secrets."
+            exit 1
+          fi
+          echo "Triggering: ${CRON_URL}"
+          # Fire the batch. Use -f to follow redirects; --fail exits non-zero
+          # on HTTP errors so a failed trigger fails the workflow run.
+          curl -fsS -X GET \
+            ${CRON_SECRET:+-H "x-cron-secret: ${CRON_SECRET}"} \
+            "${CRON_URL}"
+          echo
+          echo "Triggered. Server runs the batch in the background."

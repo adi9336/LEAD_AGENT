@@ -111,6 +111,7 @@ class Settings(BaseSettings):
     # ---- Security ----
     webhook_secret: str = ""   # monday webhook shared secret (empty = unverified/dev)
     admin_token: str = ""      # Bearer token for /leads and /audit
+    cron_secret: str = ""      # x-cron-secret for /api/cron (empty = open/dev)
 
     # ---- LLM (live scoring only) ----
     openai_api_key: str = ""

@@ -1,23 +1,21 @@
 # Render Blueprint (infrastructure-as-code).
 # Deploy: push repo to GitHub -> Render -> New -> Blueprint -> connect repo.
 #
-# Defines TWO resources from one Docker image:
+# ONLY ONE resource now: a FREE web service serving the FastAPI app.
 #
-#   1. lead-agent-web  (WEB SERVICE)  — public URL serving the live
-#        dashboard (/dashboard). Reads from monday (system of record).
+#   lead-agent-web  (WEB SERVICE, plan: free) — public URL serving the live
+#       dashboard (/dashboard) AND the /api/cron trigger endpoint.
 #
-#   2. lead-agent-cron  (WORKER, self-scheduling loop)  — runs hourly:
-#        - fetch unscored leads from monday.com
-#        - score each with the LLM (retry + backoff for a REAL score)
-#        - write results back to monday + send crafted Hot-lead WhatsApp alert
-#      The worker loops: run -> sleep 3600s -> run again (≈ hourly).
-#      It needs NO `schedule` field (this account's Blueprint schema does
-#      not accept `schedule`), so we self-schedule inside the container.
+# The hourly batch is NO LONGER a paid worker. It is triggered by a FREE
+# external scheduler: .github/workflows/hourly-cron.yml (GitHub Actions,
+# `schedule: '0 * * * *'`) curls https://<your-app>.onrender.com/api/cron
+# every hour. GitHub Actions free tier (2000 min/mo) easily covers this, so
+# the whole thing runs at ZERO cost — no paid worker, no Pro plan needed.
 #
 # monday is the system of record; local SQLite is only an audit log.
 
 services:
-  # ---- Web service: public dashboard (FIRST) ----------------------
+  # ---- Web service: public dashboard + cron trigger (FREE) ----------
   - name: lead-agent-web
     type: web
     runtime: docker
@@ -51,57 +49,7 @@ services:
         sync: false
       - key: ADMIN_TOKEN
         sync: false
-      - key: WEBHOOK_SECRET
-        sync: false
-      - key: LANGSMITH_API_KEY
-        sync: false
-      - key: LANGSMITH_PROJECT
-        value: LEAD_AGENT
-      - key: LANGCHAIN_TRACING
-        value: "true"
-      - key: LANGCHAIN_TRACING_V2
-        value: "true"
-      - key: LANGSMITH_ENDPOINT
-        value: https://api.smith.langchain.com
-
-  # ---- Hourly cron runner (worker, self-scheduling loop) ----------
-  - name: lead-agent-cron
-    type: worker
-    runtime: docker
-    dockerfilePath: ./Dockerfile
-    # No `schedule` field (this account rejects it). Loop hourly:
-    # run the cron, sleep 1h, repeat. Detached mode keeps it alive.
-    dockerCommand: "sh -c 'while true; do python scripts/cron_run.py; echo \"[cron] sleeping 3600s\"; sleep 3600; done'"
-    envVars:
-      - key: ADAPTER_MODE
-        value: live
-      - key: ALERT_PROVIDER
-        value: whatsapp
-      - key: USE_LLM
-        sync: false            # auto: on if OPENAI_API_KEY set
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: MONDAY_API_TOKEN
-        sync: false
-      - key: MONDAY_BOARD_ID
-        sync: false
-      - key: WHATSAPP_TOKEN
-        sync: false
-      - key: WHATSAPP_PHONE_NUMBER_ID
-        sync: false
-      - key: WHATSAPP_API_URL
-        value: https://graph.facebook.com/v19.0
-      - key: WHATSAPP_TEMPLATE
-        value: lead_alert
-      - key: WHATSAPP_TEMPLATE_HAS_VAR
-        value: "true"
-      - key: WHATSAPP_TEMPLATE_VAR
-        value: lead_message
-      - key: ALERT_RECIPIENT_PHONE
-        sync: false
-      - key: REVIEWER_PHONE
-        sync: false
-      - key: ADMIN_TOKEN
+      - key: CRON_SECRET
         sync: false
       - key: WEBHOOK_SECRET
         sync: false
