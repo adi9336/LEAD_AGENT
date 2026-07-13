@@ -3,78 +3,27 @@
 #
 # Defines TWO resources from one Docker image:
 #
-#   1. lead-agent-cron  (SERVICE of `type: cron`)  — runs hourly:
+#   1. lead-agent-web  (WEB SERVICE)  — a public URL serving the live
+#        dashboard (/dashboard). Reads straight from monday (the system
+#        of record) so it shows real leads across separate containers.
+#
+#   2. lead-agent-cron  (WORKER service, hourly)  — runs on schedule:
 #        - fetch unscored leads from monday.com
 #        - score each with the LLM (retry + backoff for a REAL score)
 #        - write results back to monday + send the crafted Hot-lead WhatsApp alert
 #      Then it exits. No always-on server, no Redis, no Postgres -> cheapest.
 #
-#   2. lead-agent-web  (SERVICE of `type: web`)  — a public URL serving
-#        the live dashboard (/dashboard). Reads straight from monday (the
-#        system of record) so it shows real leads across separate containers.
-#
 # monday is the system of record; the local SQLite is only an audit log.
 #
-# Schema note: Render's Blueprint recognizes a cron job as a `services:`
-# entry with `type: cron` + `schedule` (cron string) + `buildCommand`
-# + `startCommand`. (A `worker` type does NOT accept `schedule`, so the
-# cron must be `type: cron` with `startCommand`.)
+# Schema note: this account's Blueprint parser rejects top-level
+# `cronJobs:` and `type: cron` -> "cron job not found in type
+# file.spec". A cron must be a `services:` entry with `type: worker`
+# + `schedule` (cron string) + `dockerCommand`. Web uses `type: web`
+# + `dockerCommand` and must NOT carry cron-only fields (schedule/cron).
+# Web is listed FIRST so services[0] is never the cron.
 
 services:
-  # ---- Hourly cron runner (type: cron) --------------------------------
-  - name: lead-agent-cron
-    type: cron
-    runtime: docker
-    dockerfilePath: ./Dockerfile
-    schedule: "0 * * * *"                 # every hour at minute 0
-    buildCommand: "true"                   # Render requires a string build step
-    startCommand: "python scripts/cron_run.py"
-    envVars:
-      - key: ADAPTER_MODE
-        value: live
-      - key: ALERT_PROVIDER
-        value: whatsapp
-      - key: USE_LLM
-        sync: false            # auto: on if OPENAI_API_KEY set
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: MONDAY_API_TOKEN
-        sync: false
-      - key: MONDAY_BOARD_ID
-        sync: false
-      - key: WHATSAPP_TOKEN
-        sync: false
-      - key: WHATSAPP_PHONE_NUMBER_ID
-        sync: false
-      - key: WHATSAPP_API_URL
-        value: https://graph.facebook.com/v19.0
-      - key: WHATSAPP_TEMPLATE
-        value: lead_alert
-      - key: WHATSAPP_TEMPLATE_HAS_VAR
-        value: "true"
-      - key: WHATSAPP_TEMPLATE_VAR
-        value: lead_message
-      - key: ALERT_RECIPIENT_PHONE
-        sync: false
-      - key: REVIEWER_PHONE
-        sync: false
-      - key: ADMIN_TOKEN
-        sync: false
-      - key: WEBHOOK_SECRET
-        sync: false
-      - key: LANGSMITH_API_KEY
-        sync: false
-      - key: LANGSMITH_PROJECT
-        value: LEAD_AGENT
-      - key: LANGCHAIN_TRACING
-        value: "true"
-      - key: LANGCHAIN_TRACING_V2
-        value: "true"
-      - key: LANGSMITH_ENDPOINT
-        value: https://api.smith.langchain.com
-    # No DATABASE_URL / REDIS_URL -> SQLite default (audit log only).
-
-  # ---- Web service: public dashboard ----------------------------
+  # ---- Web service: public dashboard (FIRST) ----------------------
   - name: lead-agent-web
     type: web
     runtime: docker
@@ -114,9 +63,61 @@ services:
         sync: false
       - key: LANGSMITH_PROJECT
         value: LEAD_AGENT
-      - key: LANGCHAIN_TRACING
+      - key: LANGSMITH_TRACING
         value: "true"
       - key: LANGCHAIN_TRACING_V2
         value: "true"
       - key: LANGSMITH_ENDPOINT
         value: https://api.smith.langchain.com
+
+  # ---- Hourly cron runner (worker, SECOND) -----------------------
+  - name: lead-agent-cron
+    type: worker
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    schedule: "0 * * * *"            # every hour at minute 0
+    dockerCommand: "python scripts/cron_run.py"
+    envVars:
+      - key: ADAPTER_MODE
+        value: live
+      - key: ALERT_PROVIDER
+        value: whatsapp
+      - key: USE_LLM
+        sync: false            # auto: on if OPENAI_API_KEY set
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: MONDAY_API_TOKEN
+        sync: false
+      - key: MONDAY_BOARD_ID
+        sync: false
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_API_URL
+        value: https://graph.facebook.com/v19.0
+      - key: WHATSAPP_TEMPLATE
+        value: lead_alert
+      - key: WHATSAPP_TEMPLATE_HAS_VAR
+        value: "true"
+      - key: WHATSAPP_TEMPLATE_VAR
+        value: lead_message
+      - key: ALERT_RECIPIENT_PHONE
+        sync: false
+      - key: REVIEWER_PHONE
+        sync: false
+      - key: ADMIN_TOKEN
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false
+      - key: LANGSMITH_API_KEY
+        sync: false
+      - key: LANGSMITH_PROJECT
+        value: LEAD_AGENT
+      - key: LANGSMITH_TRACING
+        value: "true"
+      - key: LANGCHAIN_TRACING_V2
+        value: "true"
+      - key: LANGSMITH_ENDPOINT
+        value: https://api.smith.langchain.com
+    # No DATABASE_URL / REDIS_URL -> SQLite default (audit log only).
