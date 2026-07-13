@@ -17,6 +17,11 @@ langchain>=0.2
 langchain-openai>=0.1
 langsmith>=0.1
 
+# ── Agent orchestration (LAZY-imported: only used for Hot-lead flow) ──
+# LangGraph drives the WhatsApp hot-lead agent (compose message -> send).
+# Only imported when a lead scores Hot; safe to omit in minimal setups.
+langgraph>=0.2
+
 # ── Observability (LAZY-imported: only needed when LANGSMITH_TRACING=true) ──
 langsmith>=0.1
 

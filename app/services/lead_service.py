@@ -141,18 +141,41 @@ def score_and_deliver(db: Session, lead_id: str, *, request_id: str | None = Non
     # 3. Alert assignee (retried; escalation on final failure)
     whatsapp = get_whatsapp_client()
     if not lead.alert_sent:
-        message = build_alert_message(lead, result.tier, result.score, result.reasons)
-        try:
-            with_retry(lambda: whatsapp.send(settings.alert_recipient_phone, message),
-                       request_id=rid, event="alerted")
-            lead.alert_sent = True
-            lead.alerted_at = _now()
-            db.commit()
-            _event(db, lead.id, "alerted", "ok", "whatsapp sent", rid)
-            log("alerted", request_id=rid, lead_id=lead.id)
-        except Exception as exc:  # noqa: BLE001
-            _event(db, lead.id, "alerted", "failure", f"{type(exc).__name__}", rid)
-            _escalate(db, lead, rid, reason="alert_failed")
+        if result.tier == "Hot":
+            # Hot lead -> LangGraph agent composes a personalized message from
+            # the full lead detail and sends it (observable, retry-able flow).
+            from app.agents.whatsapp_hot import run_hot_lead_flow
+            lead_snapshot = {
+                "id": lead.id, "name": lead.name, "company": lead.company,
+                "industry": lead.industry, "source": lead.source,
+            }
+            flow = run_hot_lead_flow(
+                lead_snapshot, result.score, result.classification,
+                result.reasons, request_id=rid,
+            )
+            if flow.get("send_status") == "sent":
+                lead.alert_sent = True
+                lead.alerted_at = _now()
+                db.commit()
+                _event(db, lead.id, "alerted", "ok", "hot_agent sent", rid)
+                log("alerted", request_id=rid, lead_id=lead.id, channel="hot_agent")
+            else:
+                _event(db, lead.id, "alerted", "failure",
+                       flow.get("error", "hot_agent_failed"), rid)
+                _escalate(db, lead, rid, reason="hot_agent_failed")
+        else:
+            message = build_alert_message(lead, result.tier, result.score, result.reasons)
+            try:
+                with_retry(lambda: whatsapp.send(settings.alert_recipient_phone, message),
+                           request_id=rid, event="alerted")
+                lead.alert_sent = True
+                lead.alerted_at = _now()
+                db.commit()
+                _event(db, lead.id, "alerted", "ok", "whatsapp sent", rid)
+                log("alerted", request_id=rid, lead_id=lead.id)
+            except Exception as exc:  # noqa: BLE001
+                _event(db, lead.id, "alerted", "failure", f"{type(exc).__name__}", rid)
+                _escalate(db, lead, rid, reason="alert_failed")
 
     return lead
 

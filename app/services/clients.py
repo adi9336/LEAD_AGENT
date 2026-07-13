@@ -241,32 +241,37 @@ class LiveCloudWhatsApp(WhatsAppClient):
         import httpx
 
         url = f"{settings.whatsapp_api_url}/{settings.whatsapp_phone_number_id}/messages"
-        # Use an approved template, not free-text. On WhatsApp Cloud (esp. a
-        # test number) free-text only delivers to allow-listed / 24h-windowed
-        # recipients; Meta accepts free-text to cold leads but silently drops it.
-        # A template (hello_world is pre-approved for the test number) delivers
-        # to anyone. The default hello_world takes NO body params, so we
-        # send the scored-lead summary as the alert's own text via the
-        # template's static body; if you later add a {{1}} variable to the
-        # template, switch components back on.
-        payload = {
+        # Primary: free-text (carries the real composed message). On a WhatsApp
+        # test number free-text only delivers to allow-listed / 24h-windowed
+        # recipients; Meta accepts it but silently drops it otherwise.
+        # Fallback: the pre-approved hello_world template, which delivers to
+        # anyone. The template body is static, so the composed detail is lost
+        # in the fallback case — but the alert still reaches the phone.
+        text_payload = {
+            "messaging_product": "whatsapp",
+            "to": to_phone,
+            "type": "text",
+            "text": {"preview_url": False, "body": message},
+        }
+        resp = httpx.post(
+            url, json=text_payload,
+            headers={"Authorization": f"Bearer {settings.whatsapp_token}"}, timeout=10,
+        )
+        if resp.status_code == 200 and "error" not in resp.json():
+            return  # free-text delivered (or accepted) — done
+        # Free-text failed (e.g. recipient not deliverable) -> template fallback
+        tmpl_payload = {
             "messaging_product": "whatsapp",
             "to": to_phone,
             "type": "template",
-            "template": {
-                "name": "hello_world",
-                "language": {"code": "en_US"},
-            },
+            "template": {"name": "hello_world", "language": {"code": "en_US"}},
         }
-        resp = httpx.post(
-            url, json=payload,
+        resp2 = httpx.post(
+            url, json=tmpl_payload,
             headers={"Authorization": f"Bearer {settings.whatsapp_token}"}, timeout=10,
         )
-        resp.raise_for_status()
-        # Meta returns HTTP 200 even when the message is rejected (e.g. recipient
-        # not opted in); the error lives in the JSON body. Surface it so the
-        # pipeline's retry/escalation actually triggers.
-        body = resp.json()
+        resp2.raise_for_status()
+        body = resp2.json()
         if "error" in body:
             raise RuntimeError(f"WhatsApp Cloud API error: {body['error']}")
 
