@@ -25,7 +25,6 @@ cronJobs:
   - name: lead-agent-cron
     runtime: docker
     dockerfilePath: ./Dockerfile
-    plan: free
     schedule: "0 * * * *"        # every hour at minute 0
     command: "python scripts/cron_run.py"
     envVars:
