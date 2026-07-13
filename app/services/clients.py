@@ -241,35 +241,40 @@ class LiveCloudWhatsApp(WhatsAppClient):
         import httpx
 
         url = f"{settings.whatsapp_api_url}/{settings.whatsapp_phone_number_id}/messages"
-        # Primary: free-text (carries the real composed message). On a WhatsApp
-        # test number free-text only delivers to allow-listed / 24h-windowed
-        # recipients; Meta accepts it but silently drops it otherwise.
-        # Fallback: the pre-approved hello_world template, which delivers to
-        # anyone. The template body is static, so the composed detail is lost
-        # in the fallback case — but the alert still reaches the phone.
-        text_payload = {
-            "messaging_product": "whatsapp",
-            "to": to_phone,
-            "type": "text",
-            "text": {"preview_url": False, "body": message},
-        }
-        resp = httpx.post(
-            url, json=text_payload,
-            headers={"Authorization": f"Bearer {settings.whatsapp_token}"}, timeout=10,
-        )
+        template = settings.whatsapp_template
+        headers = {"Authorization": f"Bearer {settings.whatsapp_token}",
+                   "Content-Type": "application/json"}
+
+        # If the configured template exposes a {{1}} body variable, send the
+        # crafted message INSIDE the template — delivers to anyone on a test
+        # number AND carries the personalized text.
+        if settings.whatsapp_template_has_var:
+            tmpl = {"name": template, "language": {"code": "en_US"},
+                    "components": [{"type": "body",
+                                    "parameters": [{"type": "text",
+                                                    "text": message[:1024]}]}]}
+            resp = httpx.post(url, json={"messaging_product": "whatsapp",
+                                         "to": to_phone, "type": "template",
+                                         "template": tmpl},
+                              headers=headers, timeout=10)
+            if resp.status_code == 200 and "error" not in resp.json():
+                return
+
+        # Free-text carries the REAL crafted message. On a WhatsApp test number
+        # it only delivers to allow-listed / 24h-windowed recipients (Meta
+        # silently drops the rest), so we fall back to the approved template
+        # when free-text is not deliverable.
+        text_payload = {"messaging_product": "whatsapp", "to": to_phone,
+                        "type": "text", "text": {"preview_url": False, "body": message}}
+        resp = httpx.post(url, json=text_payload, headers=headers, timeout=10)
         if resp.status_code == 200 and "error" not in resp.json():
-            return  # free-text delivered (or accepted) — done
-        # Free-text failed (e.g. recipient not deliverable) -> template fallback
-        tmpl_payload = {
-            "messaging_product": "whatsapp",
-            "to": to_phone,
-            "type": "template",
-            "template": {"name": "hello_world", "language": {"code": "en_US"}},
-        }
-        resp2 = httpx.post(
-            url, json=tmpl_payload,
-            headers={"Authorization": f"Bearer {settings.whatsapp_token}"}, timeout=10,
-        )
+            return  # crafted free-text delivered (allow-listed recipient)
+
+        # Free-text not deliverable -> approved template fallback (lands, generic)
+        tmpl_payload = {"messaging_product": "whatsapp", "to": to_phone,
+                        "type": "template",
+                        "template": {"name": template, "language": {"code": "en_US"}}}
+        resp2 = httpx.post(url, json=tmpl_payload, headers=headers, timeout=10)
         resp2.raise_for_status()
         body = resp2.json()
         if "error" in body:

@@ -1,0 +1,270 @@
+digraph G {
+concentrate=true;
+splines="ortho";
+rankdir="LR";
+subgraph legend{
+    rank = min;
+    label = "legend";
+    Legend [shape=none, margin=0, label = <
+        <table cellspacing="0" cellpadding="0" border="1"><tr><td>Code2flow Legend</td></tr><tr><td>
+        <table cellspacing="0">
+        <tr><td>Regular function</td><td width="50px" bgcolor='#cccccc'></td></tr>
+        <tr><td>Trunk function (nothing calls this)</td><td bgcolor='#966F33'></td></tr>
+        <tr><td>Leaf function (this calls nothing else)</td><td bgcolor='#6db33f'></td></tr>
+        <tr><td>Function call</td><td><font color='black'>&#8594;</font></td></tr>
+        </table></td></tr></table>
+        >];
+}node_27da42a5 [label="215: get_monday_client()" name="clients::get_monday_client" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_f0d60be1 [label="299: get_whatsapp_client()" name="clients::get_whatsapp_client" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_a58a72c1 [label="63: _fmt()" name="dashboard::_fmt" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_5c0cdf0d [label="80: _rationale_text()" name="dashboard::_rationale_text" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_62f6ae50 [label="93: dashboard()" name="dashboard::dashboard" shape="rect" style="rounded,filled" fillcolor="#966F33" ];
+node_85f02893 [label="33: dashboard_run_cron()" name="dashboard::dashboard_run_cron" shape="rect" style="rounded,filled" fillcolor="#966F33" ];
+node_91b6b9c8 [label="177: _node_audit()" name="lead_graph::_node_audit" shape="rect" style="rounded,filled" fillcolor="#966F33" ];
+node_32884760 [label="156: _node_enrich()" name="lead_graph::_node_enrich" shape="rect" style="rounded,filled" fillcolor="#966F33" ];
+node_a3ca0344 [label="106: _node_hot_alert()" name="lead_graph::_node_hot_alert" shape="rect" style="rounded,filled" fillcolor="#966F33" ];
+node_28eff02c [label="72: _node_score()" name="lead_graph::_node_score" shape="rect" style="rounded,filled" fillcolor="#966F33" ];
+node_2087a5a6 [label="133: _node_static_alert()" name="lead_graph::_node_static_alert" shape="rect" style="rounded,filled" fillcolor="#966F33" ];
+node_9a014c6a [label="64: _traceable()" name="lead_graph::_traceable" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_b7f248b4 [label="190: build_lead_graph()" name="lead_graph::build_lead_graph" shape="rect" style="rounded,filled" fillcolor="#cccccc" ];
+node_ff3494d3 [label="210: run_lead_graph()" name="lead_graph::run_lead_graph" shape="rect" style="rounded,filled" fillcolor="#cccccc" ];
+node_bfbb4d76 [label="163: _escalate()" name="lead_service::_escalate" shape="rect" style="rounded,filled" fillcolor="#cccccc" ];
+node_066bc6ca [label="53: _event()" name="lead_service::_event" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_5cd10767 [label="113: _lead_fields()" name="lead_service::_lead_fields" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_98725280 [label="37: _now()" name="lead_service::_now" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_20d98159 [label="41: build_alert_message()" name="lead_service::build_alert_message" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_0cd3ae95 [label="61: intake_lead()" name="lead_service::intake_lead" shape="rect" style="rounded,filled" fillcolor="#cccccc" ];
+node_9d7b126c [label="126: run_cron()" name="lead_service::run_cron" shape="rect" style="rounded,filled" fillcolor="#cccccc" ];
+node_af15d3a5 [label="89: score_and_deliver()" name="lead_service::score_and_deliver" shape="rect" style="rounded,filled" fillcolor="#cccccc" ];
+node_f248d155 [label="118: _extract_json()" name="llm_gateway::_extract_json" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_5be02ed4 [label="140: _format_input()" name="llm_gateway::_format_input" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_3202cbfa [label="135: _prompt_path()" name="llm_gateway::_prompt_path" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_7e2b27e4 [label="28: _use_llm()" name="llm_gateway::_use_llm" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_c2c5582d [label="53: score_lead()" name="llm_gateway::score_lead" shape="rect" style="rounded,filled" fillcolor="#cccccc" ];
+node_d427ec9f [label="30: get_request_id()" name="logging::get_request_id" shape="rect" style="rounded,filled" fillcolor="#cccccc" ];
+node_c34db070 [label="48: log()" name="logging::log" shape="rect" style="rounded,filled" fillcolor="#cccccc" ];
+node_21f93181 [label="20: new_request_id()" name="logging::new_request_id" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_c6832c9f [label="25: set_request_id()" name="logging::set_request_id" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_515efbcc [label="0: (global)()" name="main::(global)" shape="rect" style="rounded,filled" fillcolor="#966F33" ];
+node_f3c0282e [label="26: _lifespan()" name="main::_lifespan" shape="rect" style="rounded,filled" fillcolor="#966F33" ];
+node_2c32fd13 [label="32: create_app()" name="main::create_app" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_38f9e9b2 [label="57: to_dict()" name="models::Lead.to_dict" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_31fff6fe [label="13: with_retry()" name="retry::with_retry" shape="rect" style="rounded,filled" fillcolor="#cccccc" ];
+node_03598d82 [label="35: list_leads()" name="routes::list_leads" shape="rect" style="rounded,filled" fillcolor="#966F33" ];
+node_3a4fc3e2 [label="56: _classify()" name="scoring::_classify" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_766631df [label="36: _points_industry()" name="scoring::_points_industry" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_a842f164 [label="45: _points_inquiry()" name="scoring::_points_inquiry" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_ef21c704 [label="25: _points_source()" name="scoring::_points_source" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_da366c73 [label="64: _tier()" name="scoring::_tier" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_98543afb [label="72: rules_score()" name="scoring::rules_score" shape="rect" style="rounded,filled" fillcolor="#cccccc" ];
+node_577c7c3b [label="94: validate_score_dict()" name="scoring::validate_score_dict" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_c82632ad [label="40: init_db()" name="session::init_db" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_1888f1ce [label="79: _extract_lead()" name="webhook::_extract_lead" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_4d6f92ff [label="37: _verify_secret()" name="webhook::_verify_secret" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_9918a77d [label="51: webhook_monday()" name="webhook::webhook_monday" shape="rect" style="rounded,filled" fillcolor="#966F33" ];
+node_680c52cc [label="58: _compose_with_llm()" name="whatsapp_hot::_compose_with_llm" shape="rect" style="rounded,filled" fillcolor="#cccccc" ];
+node_6201f894 [label="105: _node_compose()" name="whatsapp_hot::_node_compose" shape="rect" style="rounded,filled" fillcolor="#966F33" ];
+node_1ea71420 [label="132: _node_send()" name="whatsapp_hot::_node_send" shape="rect" style="rounded,filled" fillcolor="#966F33" ];
+node_b6e0a506 [label="153: _traceable()" name="whatsapp_hot::_traceable" shape="rect" style="rounded,filled" fillcolor="#6db33f" ];
+node_22c6d02d [label="162: build_hot_lead_graph()" name="whatsapp_hot::build_hot_lead_graph" shape="rect" style="rounded,filled" fillcolor="#cccccc" ];
+node_181309fe [label="178: run_hot_lead_flow()" name="whatsapp_hot::run_hot_lead_flow" shape="rect" style="rounded,filled" fillcolor="#cccccc" ];
+node_62f6ae50 -> node_27da42a5 [color="#000000" penwidth="2"];
+node_62f6ae50 -> node_a58a72c1 [color="#000000" penwidth="2"];
+node_62f6ae50 -> node_a58a72c1 [color="#000000" penwidth="2"];
+node_62f6ae50 -> node_5c0cdf0d [color="#000000" penwidth="2"];
+node_85f02893 -> node_9d7b126c [color="#009E73" penwidth="2"];
+node_91b6b9c8 -> node_066bc6ca [color="#000000" penwidth="2"];
+node_32884760 -> node_27da42a5 [color="#000000" penwidth="2"];
+node_32884760 -> node_bfbb4d76 [color="#000000" penwidth="2"];
+node_32884760 -> node_066bc6ca [color="#000000" penwidth="2"];
+node_32884760 -> node_066bc6ca [color="#000000" penwidth="2"];
+node_32884760 -> node_31fff6fe [color="#000000" penwidth="2"];
+node_a3ca0344 -> node_bfbb4d76 [color="#F0E442" penwidth="2"];
+node_a3ca0344 -> node_066bc6ca [color="#F0E442" penwidth="2"];
+node_a3ca0344 -> node_066bc6ca [color="#F0E442" penwidth="2"];
+node_a3ca0344 -> node_98725280 [color="#F0E442" penwidth="2"];
+node_a3ca0344 -> node_181309fe [color="#F0E442" penwidth="2"];
+node_28eff02c -> node_5cd10767 [color="#F0E442" penwidth="2"];
+node_28eff02c -> node_98725280 [color="#F0E442" penwidth="2"];
+node_28eff02c -> node_c2c5582d [color="#F0E442" penwidth="2"];
+node_28eff02c -> node_c2c5582d [color="#F0E442" penwidth="2"];
+node_28eff02c -> node_c34db070 [color="#F0E442" penwidth="2"];
+node_28eff02c -> node_31fff6fe [color="#F0E442" penwidth="2"];
+node_2087a5a6 -> node_f0d60be1 [color="#D55E00" penwidth="2"];
+node_2087a5a6 -> node_bfbb4d76 [color="#D55E00" penwidth="2"];
+node_2087a5a6 -> node_066bc6ca [color="#D55E00" penwidth="2"];
+node_2087a5a6 -> node_066bc6ca [color="#D55E00" penwidth="2"];
+node_2087a5a6 -> node_98725280 [color="#D55E00" penwidth="2"];
+node_2087a5a6 -> node_20d98159 [color="#D55E00" penwidth="2"];
+node_2087a5a6 -> node_31fff6fe [color="#D55E00" penwidth="2"];
+node_b7f248b4 -> node_9a014c6a [color="#F0E442" penwidth="2"];
+node_b7f248b4 -> node_9a014c6a [color="#F0E442" penwidth="2"];
+node_b7f248b4 -> node_9a014c6a [color="#F0E442" penwidth="2"];
+node_b7f248b4 -> node_9a014c6a [color="#F0E442" penwidth="2"];
+node_b7f248b4 -> node_9a014c6a [color="#F0E442" penwidth="2"];
+node_ff3494d3 -> node_b7f248b4 [color="#009E73" penwidth="2"];
+node_ff3494d3 -> node_c34db070 [color="#009E73" penwidth="2"];
+node_ff3494d3 -> node_c34db070 [color="#009E73" penwidth="2"];
+node_bfbb4d76 -> node_f0d60be1 [color="#D55E00" penwidth="2"];
+node_bfbb4d76 -> node_066bc6ca [color="#D55E00" penwidth="2"];
+node_bfbb4d76 -> node_98725280 [color="#D55E00" penwidth="2"];
+node_bfbb4d76 -> node_c34db070 [color="#D55E00" penwidth="2"];
+node_bfbb4d76 -> node_31fff6fe [color="#D55E00" penwidth="2"];
+node_0cd3ae95 -> node_98725280 [color="#0072B2" penwidth="2"];
+node_0cd3ae95 -> node_c34db070 [color="#0072B2" penwidth="2"];
+node_9d7b126c -> node_27da42a5 [color="#F0E442" penwidth="2"];
+node_9d7b126c -> node_98725280 [color="#F0E442" penwidth="2"];
+node_9d7b126c -> node_0cd3ae95 [color="#F0E442" penwidth="2"];
+node_9d7b126c -> node_af15d3a5 [color="#F0E442" penwidth="2"];
+node_9d7b126c -> node_c34db070 [color="#F0E442" penwidth="2"];
+node_9d7b126c -> node_c34db070 [color="#F0E442" penwidth="2"];
+node_af15d3a5 -> node_ff3494d3 [color="#0072B2" penwidth="2"];
+node_af15d3a5 -> node_c34db070 [color="#0072B2" penwidth="2"];
+node_c2c5582d -> node_f248d155 [color="#0072B2" penwidth="2"];
+node_c2c5582d -> node_5be02ed4 [color="#0072B2" penwidth="2"];
+node_c2c5582d -> node_3202cbfa [color="#0072B2" penwidth="2"];
+node_c2c5582d -> node_7e2b27e4 [color="#0072B2" penwidth="2"];
+node_c2c5582d -> node_c34db070 [color="#0072B2" penwidth="2"];
+node_c2c5582d -> node_c34db070 [color="#0072B2" penwidth="2"];
+node_c2c5582d -> node_c34db070 [color="#0072B2" penwidth="2"];
+node_c2c5582d -> node_c34db070 [color="#0072B2" penwidth="2"];
+node_c2c5582d -> node_98543afb [color="#0072B2" penwidth="2"];
+node_c2c5582d -> node_98543afb [color="#0072B2" penwidth="2"];
+node_c2c5582d -> node_98543afb [color="#0072B2" penwidth="2"];
+node_c2c5582d -> node_577c7c3b [color="#0072B2" penwidth="2"];
+node_d427ec9f -> node_21f93181 [color="#CC79A7" penwidth="2"];
+node_c34db070 -> node_d427ec9f [color="#000000" penwidth="2"];
+node_515efbcc -> node_2c32fd13 [color="#F0E442" penwidth="2"];
+node_f3c0282e -> node_c82632ad [color="#D55E00" penwidth="2"];
+node_31fff6fe -> node_c34db070 [color="#D55E00" penwidth="2"];
+node_03598d82 -> node_38f9e9b2 [color="#56B4E9" penwidth="2"];
+node_98543afb -> node_3a4fc3e2 [color="#009E73" penwidth="2"];
+node_98543afb -> node_766631df [color="#009E73" penwidth="2"];
+node_98543afb -> node_a842f164 [color="#009E73" penwidth="2"];
+node_98543afb -> node_ef21c704 [color="#009E73" penwidth="2"];
+node_98543afb -> node_da366c73 [color="#009E73" penwidth="2"];
+node_9918a77d -> node_0cd3ae95 [color="#0072B2" penwidth="2"];
+node_9918a77d -> node_af15d3a5 [color="#0072B2" penwidth="2"];
+node_9918a77d -> node_c34db070 [color="#0072B2" penwidth="2"];
+node_9918a77d -> node_c34db070 [color="#0072B2" penwidth="2"];
+node_9918a77d -> node_21f93181 [color="#0072B2" penwidth="2"];
+node_9918a77d -> node_c6832c9f [color="#0072B2" penwidth="2"];
+node_9918a77d -> node_1888f1ce [color="#0072B2" penwidth="2"];
+node_9918a77d -> node_4d6f92ff [color="#0072B2" penwidth="2"];
+node_680c52cc -> node_c34db070 [color="#F0E442" penwidth="2"];
+node_6201f894 -> node_c34db070 [color="#F0E442" penwidth="2"];
+node_6201f894 -> node_31fff6fe [color="#F0E442" penwidth="2"];
+node_6201f894 -> node_680c52cc [color="#F0E442" penwidth="2"];
+node_1ea71420 -> node_f0d60be1 [color="#000000" penwidth="2"];
+node_1ea71420 -> node_c34db070 [color="#000000" penwidth="2"];
+node_1ea71420 -> node_c34db070 [color="#000000" penwidth="2"];
+node_22c6d02d -> node_b6e0a506 [color="#0072B2" penwidth="2"];
+node_22c6d02d -> node_b6e0a506 [color="#0072B2" penwidth="2"];
+node_181309fe -> node_c34db070 [color="#D55E00" penwidth="2"];
+node_181309fe -> node_c34db070 [color="#D55E00" penwidth="2"];
+node_181309fe -> node_22c6d02d [color="#D55E00" penwidth="2"];
+subgraph cluster_c91ede3c {
+    node_27da42a5 node_f0d60be1;
+    label="File: clients";
+    name="clients";
+    style="filled";
+    graph[style=dotted];
+};
+subgraph cluster_7f0c1dc8 {
+    node_85f02893 node_a58a72c1 node_5c0cdf0d node_62f6ae50;
+    label="File: dashboard";
+    name="dashboard";
+    style="filled";
+    graph[style=dotted];
+};
+subgraph cluster_49dbae3f {
+    node_9a014c6a node_28eff02c node_a3ca0344 node_2087a5a6 node_32884760 node_91b6b9c8 node_b7f248b4 node_ff3494d3;
+    label="File: lead_graph";
+    name="lead_graph";
+    style="filled";
+    graph[style=dotted];
+};
+subgraph cluster_9e5ca17f {
+    node_98725280 node_20d98159 node_066bc6ca node_0cd3ae95 node_af15d3a5 node_5cd10767 node_9d7b126c node_bfbb4d76;
+    label="File: lead_service";
+    name="lead_service";
+    style="filled";
+    graph[style=dotted];
+};
+subgraph cluster_7a9e3e21 {
+    node_7e2b27e4 node_c2c5582d node_f248d155 node_3202cbfa node_5be02ed4;
+    label="File: llm_gateway";
+    name="llm_gateway";
+    style="filled";
+    graph[style=dotted];
+};
+subgraph cluster_105c0408 {
+    node_21f93181 node_c6832c9f node_d427ec9f node_c34db070;
+    label="File: logging";
+    name="logging";
+    style="filled";
+    graph[style=dotted];
+};
+subgraph cluster_867409ea {
+    node_f3c0282e node_2c32fd13 node_515efbcc;
+    label="File: main";
+    name="main";
+    style="filled";
+    graph[style=dotted];
+};
+subgraph cluster_8555bdc3 {
+    label="File: models";
+    name="models";
+    style="filled";
+    graph[style=dotted];
+    subgraph cluster_a502794f {
+        node_38f9e9b2;
+        label="Class: Lead";
+        name="Lead";
+        style="filled";
+        graph[style=dotted];
+    };
+};
+subgraph cluster_6242dc1e {
+    node_31fff6fe;
+    label="File: retry";
+    name="retry";
+    style="filled";
+    graph[style=dotted];
+};
+subgraph cluster_c96283ed {
+    node_03598d82;
+    label="File: routes";
+    name="routes";
+    style="filled";
+    graph[style=dotted];
+};
+subgraph cluster_7f484c96 {
+    node_ef21c704 node_766631df node_a842f164 node_3a4fc3e2 node_da366c73 node_98543afb node_577c7c3b;
+    label="File: scoring";
+    name="scoring";
+    style="filled";
+    graph[style=dotted];
+};
+subgraph cluster_8c3201b2 {
+    node_c82632ad;
+    label="File: session";
+    name="session";
+    style="filled";
+    graph[style=dotted];
+};
+subgraph cluster_60129f92 {
+    node_4d6f92ff node_9918a77d node_1888f1ce;
+    label="File: webhook";
+    name="webhook";
+    style="filled";
+    graph[style=dotted];
+};
+subgraph cluster_442ddff4 {
+    node_680c52cc node_6201f894 node_1ea71420 node_b6e0a506 node_22c6d02d node_181309fe;
+    label="File: whatsapp_hot";
+    name="whatsapp_hot";
+    style="filled";
+    graph[style=dotted];
+};
+}

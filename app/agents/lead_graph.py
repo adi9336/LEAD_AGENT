@@ -35,7 +35,6 @@ from app.services.lead_service import (
     _escalate,
     _lead_fields,
     _now,
-    build_alert_message,
 )
 from app.services.llm_gateway import score_lead
 
@@ -131,26 +130,18 @@ def _node_hot_alert(state: LeadState) -> dict:
 
 
 def _node_static_alert(state: LeadState) -> dict:
-    """Warm/Cold -> existing static alert (with retry + escalate)."""
+    """Warm/Cold leads -> NO WhatsApp notification.
+
+    Only HOT leads alert (via the hot-agent flow). Warm/Cold are scored and
+    synced to monday (enrich) but stay silent on WhatsApp, so the sales rep
+    only gets a ping for genuinely hot leads — not 11 messages per run.
+    """
     db = state["db"]
     lead = db.get(Lead, state["lead_id"])
     rid = state["request_id"]
-    whatsapp = get_whatsapp_client()
-    if lead.alert_sent:
-        return {"error": None}
-    message = build_alert_message(lead, state["tier"], state["score"], state["reasons"])
-    try:
-        with_retry(lambda: whatsapp.send(settings.alert_recipient_phone, message),
-                   request_id=rid, event="alerted")
-        lead.alert_sent = True
-        lead.alerted_at = _now()
-        db.commit()
-        _event(db, lead.id, "alerted", "ok", "whatsapp sent", rid)
-        return {"error": None}
-    except Exception as exc:  # noqa: BLE001
-        _event(db, lead.id, "alerted", "failure", f"{type(exc).__name__}", rid)
-        _escalate(db, lead, rid, reason="alert_failed")
-        return {"error": f"alert_failed:{exc}"}
+    _event(db, lead.id, "alerted", "skipped",
+           f"tier={state.get('tier')} (no alert for non-Hot)", rid)
+    return {"error": None}
 
 
 def _node_enrich(state: LeadState) -> dict:

@@ -88,6 +88,14 @@ class Settings(BaseSettings):
     whatsapp_token: str = ""
     whatsapp_phone_number_id: str = ""
     whatsapp_api_url: str = "https://graph.facebook.com/v19.0"
+    # Template used to deliver alerts. On a WhatsApp test number, free-text is
+    # accepted by Meta but SILENTLY DROPPED (only allow-listed / 24h-windowed
+    # recipients receive it). A template delivers to anyone. If the template
+    # has a {{1}} body variable (e.g. a custom "lead_alert" template), the
+    # crafted message rides in that variable; otherwise the static template
+    # body is sent. Default "hello_world" is pre-approved for the test number.
+    whatsapp_template: str = "hello_world"
+    whatsapp_template_has_var: bool = False  # set True when the template uses {{1}}
 
     # ---- Twilio WhatsApp (live, only if ALERT_PROVIDER=twilio) ----
     twilio_account_sid: str = ""
