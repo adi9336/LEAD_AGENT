@@ -16,18 +16,19 @@
 # monday is the system of record; the local SQLite is only an audit log.
 #
 # Schema note: Render's Blueprint recognizes a cron job as a `services:`
-# entry with `type: worker` + `schedule` (cron string) + `dockerCommand`.
-# (Top-level `cronJobs:` and `type: cron` are rejected by this
-# account's Blueprint parser -> "cron job not found in type file.spec".)
+# entry with `type: cron` + `schedule` (cron string) + `buildCommand`
+# + `startCommand`. (A `worker` type does NOT accept `schedule`, so the
+# cron must be `type: cron` with `startCommand`.)
 
 services:
-  # ---- Hourly cron runner (type: worker) ----------------------------
+  # ---- Hourly cron runner (type: cron) --------------------------------
   - name: lead-agent-cron
-    type: worker
+    type: cron
     runtime: docker
     dockerfilePath: ./Dockerfile
     schedule: "0 * * * *"                 # every hour at minute 0
-    dockerCommand: "python scripts/cron_run.py"
+    buildCommand: "true"                   # Render requires a string build step
+    startCommand: "python scripts/cron_run.py"
     envVars:
       - key: ADAPTER_MODE
         value: live
