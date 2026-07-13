@@ -235,50 +235,12 @@ class MockWhatsApp(WhatsAppClient):
 
 
 class LiveCloudWhatsApp(WhatsAppClient):
-    """Meta WhatsApp Cloud API."""
+    """Meta WhatsApp Cloud API. Delegates to app.services.whatsapp (template-
+    primary, free-text fallback, full response logging)."""
 
     def send(self, to_phone: str, message: str) -> None:
-        import httpx
-
-        url = f"{settings.whatsapp_api_url}/{settings.whatsapp_phone_number_id}/messages"
-        template = settings.whatsapp_template
-        headers = {"Authorization": f"Bearer {settings.whatsapp_token}",
-                   "Content-Type": "application/json"}
-
-        # If the configured template exposes a {{1}} body variable, send the
-        # crafted message INSIDE the template — delivers to anyone on a test
-        # number AND carries the personalized text.
-        if settings.whatsapp_template_has_var:
-            tmpl = {"name": template, "language": {"code": "en_US"},
-                    "components": [{"type": "body",
-                                    "parameters": [{"type": "text",
-                                                    "text": message[:1024]}]}]}
-            resp = httpx.post(url, json={"messaging_product": "whatsapp",
-                                         "to": to_phone, "type": "template",
-                                         "template": tmpl},
-                              headers=headers, timeout=10)
-            if resp.status_code == 200 and "error" not in resp.json():
-                return
-
-        # Free-text carries the REAL crafted message. On a WhatsApp test number
-        # it only delivers to allow-listed / 24h-windowed recipients (Meta
-        # silently drops the rest), so we fall back to the approved template
-        # when free-text is not deliverable.
-        text_payload = {"messaging_product": "whatsapp", "to": to_phone,
-                        "type": "text", "text": {"preview_url": False, "body": message}}
-        resp = httpx.post(url, json=text_payload, headers=headers, timeout=10)
-        if resp.status_code == 200 and "error" not in resp.json():
-            return  # crafted free-text delivered (allow-listed recipient)
-
-        # Free-text not deliverable -> approved template fallback (lands, generic)
-        tmpl_payload = {"messaging_product": "whatsapp", "to": to_phone,
-                        "type": "template",
-                        "template": {"name": template, "language": {"code": "en_US"}}}
-        resp2 = httpx.post(url, json=tmpl_payload, headers=headers, timeout=10)
-        resp2.raise_for_status()
-        body = resp2.json()
-        if "error" in body:
-            raise RuntimeError(f"WhatsApp Cloud API error: {body['error']}")
+        from app.services.whatsapp import send as _send
+        _send(to_phone, message)
 
 
 class LiveTwilioWhatsApp(WhatsAppClient):
