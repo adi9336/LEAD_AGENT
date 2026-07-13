@@ -3,29 +3,31 @@
 #
 # Defines TWO resources from one Docker image:
 #
-#   1. lead-agent-cron  (CRON JOB, top-level `cronJobs:`)  — runs hourly:
+#   1. lead-agent-cron  (SERVICE of `type: cron`)  — runs hourly:
 #        - fetch unscored leads from monday.com
 #        - score each with the LLM (retry + backoff for a REAL score)
 #        - write results back to monday + send the crafted Hot-lead WhatsApp alert
 #      Then it exits. No always-on server, no Redis, no Postgres -> cheapest.
 #
-#   2. lead-agent-web  (WEB SERVICE, `services:`)  — a public URL serving
+#   2. lead-agent-web  (SERVICE of `type: web`)  — a public URL serving
 #        the live dashboard (/dashboard). Reads straight from monday (the
-#        system of record) so it shows real leads even across separate containers.
+#        system of record) so it shows real leads across separate containers.
 #
 # monday is the system of record; the local SQLite is only an audit log.
 #
-# Schema note: Render's Cron jobs use `buildCommand` + `startCommand`
-# (NOT `command`). Web services use `dockerCommand`. See render.com/docs.
+# Schema note: Render's Blueprint recognizes a cron job as a `services:`
+# entry with `type: worker` + `schedule` (cron string) + `dockerCommand`.
+# (Top-level `cronJobs:` and `type: cron` are rejected by this
+# account's Blueprint parser -> "cron job not found in type file.spec".)
 
-# ---- Cron job (hourly) ------------------------------------------------
-cronJobs:
+services:
+  # ---- Hourly cron runner (type: worker) ----------------------------
   - name: lead-agent-cron
+    type: worker
     runtime: docker
     dockerfilePath: ./Dockerfile
-    schedule: "0 * * * *"          # every hour at minute 0
-    buildCommand: "true"             # Render requires a string build step
-    startCommand: "python scripts/cron_run.py"
+    schedule: "0 * * * *"                 # every hour at minute 0
+    dockerCommand: "python scripts/cron_run.py"
     envVars:
       - key: ADAPTER_MODE
         value: live
@@ -63,7 +65,7 @@ cronJobs:
         sync: false
       - key: LANGSMITH_PROJECT
         value: LEAD_AGENT
-      - key: LANGSMITH_TRACING
+      - key: LANGCHAIN_TRACING
         value: "true"
       - key: LANGCHAIN_TRACING_V2
         value: "true"
@@ -71,8 +73,7 @@ cronJobs:
         value: https://api.smith.langchain.com
     # No DATABASE_URL / REDIS_URL -> SQLite default (audit log only).
 
-# ---- Web service: public dashboard ----------------------------------
-services:
+  # ---- Web service: public dashboard ----------------------------
   - name: lead-agent-web
     type: web
     runtime: docker
@@ -112,7 +113,7 @@ services:
         sync: false
       - key: LANGSMITH_PROJECT
         value: LEAD_AGENT
-      - key: LANGSMITH_TRACING
+      - key: LANGCHAIN_TRACING
         value: "true"
       - key: LANGCHAIN_TRACING_V2
         value: "true"
