@@ -18,17 +18,16 @@
 # Status column, which fetch_due_leads reads each run, so the local
 # SQLite file is only an audit log (safe to be ephemeral between runs).
 
-# ---- Cron job: Render uses `jobs:` with `type: cron` ----------
-jobs:
+# ---- Cron job: Render Blueprint uses top-level `cronJobs:` -------
+# (NOT `jobs:` + `type: cron`.) Fields: schedule (cron string) +
+# command (what to run). Render's free cron runs it then exits.
+cronJobs:
   - name: lead-agent-cron
-    type: cron
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: free
-    # Standard cron schedule: run at minute 0 of every hour.
-    schedule: "0 * * * *"
-    # Render cron jobs use `startCommand` (not `command`). Plain string.
-    startCommand: "python scripts/cron_run.py"
+    schedule: "0 * * * *"        # every hour at minute 0
+    command: "python scripts/cron_run.py"
     envVars:
       - key: ADAPTER_MODE
         value: live
@@ -75,8 +74,7 @@ jobs:
       # No DATABASE_URL / REDIS_URL -> SQLite default (audit log only).
 
 # ---- Web service: public dashboard -------------------------------
-# Per Render's docker-web example, the run command goes in dockerCommand:.
-# This serves the FastAPI dashboard; it reads leads from monday live.
+# Render docker-web run command goes in dockerCommand.
 services:
   - name: lead-agent-web
     type: web
