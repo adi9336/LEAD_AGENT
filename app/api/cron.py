@@ -34,29 +34,25 @@ def _require_cron_secret(x_cron_secret: str | None = Header(default=None)) -> No
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid cron secret")
 
 
-@router.get("/api/cron", status_code=status.HTTP_202_ACCEPTED,
+@router.get("/api/cron", status_code=status.HTTP_200_OK,
             dependencies=[Depends(_require_cron_secret)])
 def trigger_cron() -> dict:
     """Fire the hourly batch (fetch -> score -> write -> alert).
 
-    Runs in a background thread so the caller gets 202 immediately — immune to
-    request timeouts. Auth via the ``x-cron-secret`` header (open in dev).
+    Runs SYNCHRONOUSLY and returns the run report. We do NOT spawn a
+    background thread: Vercel (and most serverless runtimes) terminate the
+    process — and any lingering threads — the moment the HTTP response is
+    sent, so a backgrounded batch would never finish. Running inline in the
+    request keeps the work alive until it completes.
+
+    Auth via the ``x-cron-secret`` header (open in dev).
     """
-    result: dict = {}
-
-    def _go() -> None:
-        init_db()
-        db = SessionLocal()
-        try:
-            result["report"] = run_cron(db)
-        except Exception as exc:  # noqa: BLE001 - surface, don't crash the thread
-            result["error"] = f"{type(exc).__name__}: {exc}"
-        finally:
-            db.close()
-
-    t = threading.Thread(target=_go, daemon=True)
-    t.start()
-    return {
-        "status": "accepted",
-        "detail": "hourly batch started in background; check /health and the audit log",
-    }
+    init_db()
+    db = SessionLocal()
+    try:
+        report = run_cron(db)
+    except Exception as exc:  # noqa: BLE001 - report, don't 500 on partial failure
+        return {"status": "error", "detail": f"{type(exc).__name__}: {exc}"}
+    finally:
+        db.close()
+    return {"status": "ok", "report": report}
