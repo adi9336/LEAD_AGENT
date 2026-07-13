@@ -48,6 +48,12 @@ jobs:
         sync: false
       - key: WHATSAPP_API_URL
         value: https://graph.facebook.com/v19.0
+      - key: WHATSAPP_TEMPLATE
+        value: lead_alert
+      - key: WHATSAPP_TEMPLATE_HAS_VAR
+        value: "true"
+      - key: WHATSAPP_TEMPLATE_VAR
+        value: lead_message
       - key: ALERT_RECIPIENT_PHONE
         sync: false
       - key: REVIEWER_PHONE
@@ -93,6 +99,12 @@ services:
         sync: false
       - key: WHATSAPP_PHONE_NUMBER_ID
         sync: false
+      - key: WHATSAPP_TEMPLATE
+        value: lead_alert
+      - key: WHATSAPP_TEMPLATE_HAS_VAR
+        value: "true"
+      - key: WHATSAPP_TEMPLATE_VAR
+        value: lead_message
       - key: ALERT_RECIPIENT_PHONE
         sync: false
       - key: REVIEWER_PHONE
