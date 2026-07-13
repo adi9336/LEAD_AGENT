@@ -2,7 +2,7 @@
 
 WHEN: a lead scores ``Hot``.
 WHAT: an LLM composes a personalized WhatsApp message from the lead's full
-detail (name, company, industry, source, score, classification, rationale),
+detail (name, company, industry, source),
 then the agent sends it to the sales reviewer.
 
 WHY LANGGRAPH: the user asked for the hot-lead handling to be a *set of agent
@@ -67,12 +67,16 @@ def _compose_with_llm(lead: dict, score: int, classification: str,
 
     system = (
         "You are the messaging agent for 'Beyond Oil' lead qualification. "
-        "Write a SHORT WhatsApp message (max 3 lines, ~300 chars) for the "
-        "INTERNAL sales reviewer about a newly scored HOT lead. Tone: crisp, "
-        "professional, urgent-but-not-pushy. Include: lead name, company, "
-        "industry, the score/100, classification, and why it's hot (1 sentence "
-        "from the rationale). No markdown, no emojis, no fake promises, no "
-        "questions. Output ONLY the message text."
+        "Write a SHORT, clean WhatsApp message (max 3 lines, ~280 chars) for "
+        "the INTERNAL sales reviewer about a newly scored HOT lead. "
+        "Tone: crisp, professional, urgent-but-not-pushy. "
+        "MUST DO: greet briefly, name the lead + company + industry + source, "
+        "and say in one sentence why they're a strong fit (use the context "
+        "provided). "
+        "MUST NOT: do NOT print any 'Score', 'Status', 'Classification', "
+        "'Rationale', or 'Why hot' labels or values. Do NOT use markdown, "
+        "emojis, bullet points, or fake promises. No questions. "
+        "Output ONLY the message text, ready to send."
     )
     human = (
         f"Lead: {lead.get('name', '-')}\n"
@@ -114,12 +118,13 @@ def _node_compose(state: HotLeadState) -> HotLeadState:
         )
         return {"composed_message": msg, "error": None}
     except Exception as exc:  # noqa: BLE001
-        # LLM failed after retries -> compose a safe fallback so the lead
-        # still gets alerted (never leave a Hot lead silent).
+        # LLM failed after retries -> compose a clean fallback (no score/
+        # status labels) so the lead still gets alerted, never silent.
         fb = (
-            f"🔥 HOT lead: {state['lead'].get('name', '-')} "
-            f"({state['lead'].get('company', '-')}) — score {state['score']}/100. "
-            f"Why: {'; '.join(state.get('reasons', [])) or '-'}"
+            f"New HOT lead: {state['lead'].get('name', '-')} "
+            f"({state['lead'].get('company', '-')}, "
+            f"{state['lead'].get('industry', '-')}). "
+            f"Strong fit — follow up promptly."
         )
         log("hot_agent_compose", request_id=rid, mode="fallback",
             error=type(exc).__name__)
