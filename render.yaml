@@ -1,39 +1,38 @@
-# Render infrastructure-as-code (Blueprint).
+# Render Blueprint (infrastructure-as-code).
 # Deploy: push repo to GitHub -> Render -> New -> Blueprint -> connect repo.
 #
-# This Blueprint defines TWO resources from one image:
+# Defines TWO resources from one Docker image:
 #
-#  1. lead-agent-cron (CRON JOB, under `jobs:`) — runs hourly:
-#       - fetches leads needing scoring from monday.com
-#       - scores each with the LLM (retried with backoff for a REAL score)
-#       - writes the result back to monday + alerts you on WhatsApp
-#     Then it exits. No always-on server, no Redis, no Postgres -> cheapest.
+#   1. lead-agent-cron  (CRON JOB, top-level `cronJobs:`)  — runs hourly:
+#        - fetch unscored leads from monday.com
+#        - score each with the LLM (retry + backoff for a REAL score)
+#        - write results back to monday + send the crafted Hot-lead WhatsApp alert
+#      Then it exits. No always-on server, no Redis, no Postgres -> cheapest.
 #
-#  2. lead-agent-web (WEB SERVICE, under `services:`) — a public URL
-#     serving the live dashboard (/dashboard). It reads straight from monday
-#     (the system of record) so it shows real leads even though cron + web
-#     run in separate containers with separate SQLite files.
+#   2. lead-agent-web  (WEB SERVICE, `services:`)  — a public URL serving
+#        the live dashboard (/dashboard). Reads straight from monday (the
+#        system of record) so it shows real leads even across separate containers.
 #
-# monday is the system of record. The scored state lives in the board's
-# Status column, which fetch_due_leads reads each run, so the local
-# SQLite file is only an audit log (safe to be ephemeral between runs).
+# monday is the system of record; the local SQLite is only an audit log.
+#
+# Schema note: Render's Cron jobs use `buildCommand` + `startCommand`
+# (NOT `command`). Web services use `dockerCommand`. See render.com/docs.
 
-# ---- Cron job: Render Blueprint uses top-level `cronJobs:` -------
-# (NOT `jobs:` + `type: cron`.) Fields: schedule (cron string) +
-# command (what to run). Render's free cron runs it then exits.
+# ---- Cron job (hourly) ------------------------------------------------
 cronJobs:
   - name: lead-agent-cron
     runtime: docker
     dockerfilePath: ./Dockerfile
-    schedule: "0 * * * *"        # every hour at minute 0
-    command: "python scripts/cron_run.py"
+    schedule: "0 * * * *"          # every hour at minute 0
+    buildCommand: "true"             # Render requires a string build step
+    startCommand: "python scripts/cron_run.py"
     envVars:
       - key: ADAPTER_MODE
         value: live
       - key: ALERT_PROVIDER
         value: whatsapp
       - key: USE_LLM
-        sync: false          # auto: on if OPENAI_API_KEY set
+        sync: false            # auto: on if OPENAI_API_KEY set
       - key: OPENAI_API_KEY
         sync: false
       - key: MONDAY_API_TOKEN
@@ -70,10 +69,9 @@ cronJobs:
         value: "true"
       - key: LANGSMITH_ENDPOINT
         value: https://api.smith.langchain.com
-      # No DATABASE_URL / REDIS_URL -> SQLite default (audit log only).
+    # No DATABASE_URL / REDIS_URL -> SQLite default (audit log only).
 
-# ---- Web service: public dashboard -------------------------------
-# Render docker-web run command goes in dockerCommand.
+# ---- Web service: public dashboard ----------------------------------
 services:
   - name: lead-agent-web
     type: web
