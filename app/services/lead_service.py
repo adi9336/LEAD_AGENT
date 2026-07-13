@@ -88,13 +88,14 @@ def intake_lead(db: Session, lead_in: LeadInput, *, request_id: str | None = Non
 
 def score_and_deliver(db: Session, lead_id: str, *, request_id: str | None = None,
                      allow_fallback: bool = False) -> Lead | None:
-    """Score (with LLM retry), enrich CRM, and alert. Runs on the queue.
+    """Score, enrich CRM, and alert — orchestrated as a LangGraph flow.
 
-    Args:
-        allow_fallback: passed to the LLM gateway. False during normal retries
-            (so transient LLM errors are retried for a REAL score); True on the
-            final exhausted attempt (task wrapper) so the lead is still scored
-            by the rules engine rather than left unscored.
+    The per-lead control flow (score -> route by tier -> Hot agent / static
+    alert -> enrich -> audit) lives in ``app.agents.lead_graph``. This wrapper
+    keeps the original signature so ``run_cron`` / tests / webhook are
+    unchanged, and delegates the work to the graph. ``allow_fallback`` is
+    accepted for signature compatibility (the leaf retry logic lives inside
+    the graph's score node).
     """
     rid = request_id or f"score-{lead_id}"
     lead = db.get(Lead, lead_id)
@@ -102,82 +103,11 @@ def score_and_deliver(db: Session, lead_id: str, *, request_id: str | None = Non
         log("scored", request_id=rid, lead_id=lead_id, error="lead_not_found")
         return None
 
-    # 1. Score (real LLM; retried with backoff for a REAL score before any
-    #    fallback). allow_fallback=False keeps retries honest; on the final
-    #    exhausted attempt we re-score with rules as the safety net.
-    lead_input = LeadInput(**_lead_fields(lead))
-    try:
-        result = with_retry(
-            lambda: score_lead(lead_input, request_id=rid, allow_fallback=False),
-            max_attempts=settings.score_max_retries,
-            base_delay=settings.score_retry_backoff,
-            request_id=rid, event="scored",
-        )
-    except Exception:
-        # All LLM retries failed -> fall back to rules so the lead is scored.
-        result = score_lead(lead_input, request_id=rid, allow_fallback=True)
-    lead.score = result.score
-    lead.tier = result.tier
-    lead.classification = result.classification
-    lead.rationale = json.dumps(result.reasons)
-    lead.scored_at = _now()
-    db.commit()
-    log("scored", request_id=rid, lead_id=lead.id, tier=result.tier, score=result.score)
+    # Delegate the whole per-lead pipeline to the LangGraph flow.
+    from app.agents.lead_graph import run_lead_graph
+    run_lead_graph(db, lead_id, request_id=rid)
 
-    # 2. Enrich CRM (retried; failure does not block the alert)
-    monday = get_monday_client()
-    try:
-        with_retry(
-            lambda: monday.enrich(lead.id, tier=result.tier, score=result.score,
-                                  classification=result.classification,
-                                  rationale=result.reasons),
-            request_id=rid, event="enriched",
-        )
-        _event(db, lead.id, "enriched", "ok", "crm updated", rid)
-    except Exception as exc:  # noqa: BLE001
-        _event(db, lead.id, "enriched", "failure", f"{type(exc).__name__}", rid)
-        _escalate(db, lead, rid, reason="crm_enrich_failed")
-
-    # 3. Alert assignee (retried; escalation on final failure)
-    whatsapp = get_whatsapp_client()
-    if not lead.alert_sent:
-        if result.tier == "Hot":
-            # Hot lead -> LangGraph agent composes a personalized message from
-            # the full lead detail and sends it (observable, retry-able flow).
-            from app.agents.whatsapp_hot import run_hot_lead_flow
-            lead_snapshot = {
-                "id": lead.id, "name": lead.name, "company": lead.company,
-                "industry": lead.industry, "source": lead.source,
-            }
-            flow = run_hot_lead_flow(
-                lead_snapshot, result.score, result.classification,
-                result.reasons, request_id=rid,
-            )
-            if flow.get("send_status") == "sent":
-                lead.alert_sent = True
-                lead.alerted_at = _now()
-                db.commit()
-                _event(db, lead.id, "alerted", "ok", "hot_agent sent", rid)
-                log("alerted", request_id=rid, lead_id=lead.id, channel="hot_agent")
-            else:
-                _event(db, lead.id, "alerted", "failure",
-                       flow.get("error", "hot_agent_failed"), rid)
-                _escalate(db, lead, rid, reason="hot_agent_failed")
-        else:
-            message = build_alert_message(lead, result.tier, result.score, result.reasons)
-            try:
-                with_retry(lambda: whatsapp.send(settings.alert_recipient_phone, message),
-                           request_id=rid, event="alerted")
-                lead.alert_sent = True
-                lead.alerted_at = _now()
-                db.commit()
-                _event(db, lead.id, "alerted", "ok", "whatsapp sent", rid)
-                log("alerted", request_id=rid, lead_id=lead.id)
-            except Exception as exc:  # noqa: BLE001
-                _event(db, lead.id, "alerted", "failure", f"{type(exc).__name__}", rid)
-                _escalate(db, lead, rid, reason="alert_failed")
-
-    return lead
+    return db.get(Lead, lead_id)
 
 
 def _lead_fields(lead: Lead) -> dict:
