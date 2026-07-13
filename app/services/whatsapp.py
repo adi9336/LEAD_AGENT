@@ -54,11 +54,13 @@ def _send_template(to_phone: str, message: str) -> dict:
     Returns Meta's JSON response (caller inspects message_status).
     """
     template = settings.whatsapp_template
+    var = settings.whatsapp_template_var
     tmpl: dict = {"name": template, "language": {"code": "en_US"}}
     if settings.whatsapp_template_has_var:
         tmpl["components"] = [{
             "type": "body",
-            "parameters": [{"type": "text", "text": message[:1024]}],
+            "parameters": [{"type": "text", "text": message[:1024],
+                            "parameter_name": var}],
         }]
     payload = {
         "messaging_product": "whatsapp",

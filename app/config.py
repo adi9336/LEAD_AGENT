@@ -91,11 +91,13 @@ class Settings(BaseSettings):
     # Template used to deliver alerts. On a WhatsApp test number, free-text is
     # accepted by Meta but SILENTLY DROPPED (only allow-listed / 24h-windowed
     # recipients receive it). A template delivers to anyone. If the template
-    # has a {{1}} body variable (e.g. a custom "lead_alert" template), the
-    # crafted message rides in that variable; otherwise the static template
-    # body is sent. Default "hello_world" is pre-approved for the test number.
+    # has a body variable (e.g. a custom "lead_alert" template with
+    # "New hot lead: {{lead_message}}"), the crafted message rides in that
+    # variable; otherwise the static template body is sent. Default "hello_world"
+    # is pre-approved for the test number (but carries no crafted text).
     whatsapp_template: str = "hello_world"
-    whatsapp_template_has_var: bool = False  # set True when the template uses {{1}}
+    whatsapp_template_has_var: bool = False  # set True when the template has a body {{var}}
+    whatsapp_template_var: str = "lead_message"  # the {{var}} name inside the template body
 
     # ---- Twilio WhatsApp (live, only if ALERT_PROVIDER=twilio) ----
     twilio_account_sid: str = ""
