@@ -54,8 +54,14 @@ class Settings(BaseSettings):
     # so transient LLM failures are retried for a REAL score instead of silently
     # falling back to the rules engine.
     redis_url: str = "redis://localhost:6379/0"
-    score_max_retries: int = 5          # LLM attempts before rules fallback
-    score_retry_backoff: int = 15       # seconds (Celery exponential backoff base)
+    # Retry knobs for the inline/parallel scoring path. These run SYNCHRONOUSLY
+    # inside the (serverless, 60s-capped) cron, so backoff must stay small — a
+    # large exponential backoff would drag the batch past the function limit and
+    # leave later leads unscored. Small delay + few attempts still absorbs
+    # transient LLM blips (429/timeout) while keeping the whole run well under
+    # 60s. Override via env for a long-lived worker if you ever add one back.
+    score_max_retries: int = 3          # LLM attempts before rules fallback
+    score_retry_backoff: float = 1.5    # seconds; doubles each attempt (1.5, 3)
 
     # ---- Parallel cron processing (LangGraph fan-out) ----
     # The hourly cron fans each due lead out as its own concurrent LangGraph
