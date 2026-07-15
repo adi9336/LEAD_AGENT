@@ -24,3 +24,7 @@ data/
 .DS_Store
 .idea/
 .vscode/
+.vercel
+.env
+.env.local
+.env.*.local
