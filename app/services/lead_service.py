@@ -124,38 +124,46 @@ def _lead_fields(lead: Lead) -> dict:
 
 
 def run_cron(db: Session, *, request_id: str | None = None) -> dict:
-    """Hourly cron entry point.
+    """Hourly cron entry point — PARALLEL LangGraph fan-out.
 
-    Fetches leads that still need scoring from monday, then scores+delivers
-    each. Scoring retries the LLM with exponential backoff (via score_lead's
-    allow_fallback=False + this loop) so transient LLM failures get a REAL
-    score rather than the rules fallback. Only after local retries are
-    exhausted does a lead fall back to rules, so it is never left unscored.
+    Fetches leads that still need scoring from monday, persists each
+    (idempotent intake), then dispatches them through a LangGraph batch graph
+    that processes every lead as its OWN concurrent stream (Send fan-out),
+    bounded by ``settings.cron_max_concurrency``. This replaces the old
+    one-lead-at-a-time loop, collapsing the run's wall-clock time ~N-fold so
+    many more leads finish inside a serverless function's time limit.
+
+    Each parallel branch runs the full per-lead pipeline (score -> route ->
+    alert -> enrich -> audit) with its own DB session; scoring still retries
+    the LLM with backoff so transient failures get a REAL score and a lead is
+    never left unscored.
 
     Returns a small report for logs/monitoring.
     """
-    from app.config import settings
+    from app.agents.batch_graph import run_batch_graph
     from app.services.clients import get_monday_client
 
     rid = request_id or f"cron-{_now().strftime('%Y%m%d%H%M')}"
     monday = get_monday_client()
     due = monday.fetch_due_leads()
-    scored = 0
-    failed = 0
+
+    # 1. Persist every due lead first (idempotent upsert). Intake is cheap and
+    #    keeping it on the caller's session here avoids racing inserts across
+    #    the parallel branches (each branch only READS/UPDATES its own row).
+    lead_ids: list[str] = []
     for lead_in in due:
         try:
-            # Persist (idempotent) then score+deliver. score_and_deliver
-            # retries the LLM internally; allow_fallback=False keeps retries
-            # honest, True only here as the final safety net.
             intake_lead(db, lead_in, request_id=f"{rid}-{lead_in.id}")
-            score_and_deliver(db, lead_in.id,
-                              request_id=f"{rid}-{lead_in.id}",
-                              allow_fallback=True)
-            scored += 1
+            lead_ids.append(lead_in.id)
         except Exception as exc:  # noqa: BLE001
-            failed += 1
             log("cron_item_failed", request_id=rid, lead_id=lead_in.id,
                 error=type(exc).__name__)
+
+    # 2. Fan out: score/enrich/alert all leads in parallel via LangGraph Send.
+    results = run_batch_graph(lead_ids, request_id=rid)
+    scored = sum(1 for r in results if r.get("status") != "failed")
+    failed = len(due) - scored
+
     log("cron_run", request_id=rid, due=len(due), scored=scored, failed=failed)
     return {"due": len(due), "scored": scored, "failed": failed}
 

@@ -57,6 +57,14 @@ class Settings(BaseSettings):
     score_max_retries: int = 5          # LLM attempts before rules fallback
     score_retry_backoff: int = 15       # seconds (Celery exponential backoff base)
 
+    # ---- Parallel cron processing (LangGraph fan-out) ----
+    # The hourly cron fans each due lead out as its own concurrent LangGraph
+    # stream (Send API) instead of scoring them one-by-one. This cuts the run's
+    # wall-clock time ~N-fold (so many more leads finish inside serverless
+    # function limits). Bounded so we never hammer the LLM / monday / SQLite
+    # with unlimited concurrency. Set to 1 to fall back to effectively serial.
+    cron_max_concurrency: int = 5       # max leads processed in parallel per run
+
     # ---- SLA targets (see plan.md / Agent.md) ----
     sla_score_minutes: int = 5       # 100% leads scored within 5 min of intake
     sla_alert_minutes: int = 2       # WhatsApp alert within 2 min of qualification
